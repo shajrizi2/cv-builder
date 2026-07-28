@@ -1,0 +1,12 @@
+{
+  "name": "@cv-builder/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "peerDependencies": {
+    "eslint": "10.8.0"
+  }
+}
