@@ -22,6 +22,7 @@ Sprint 1 — Foundation
 - [x] Created `README.md`
 - [x] Created `docs/project-status.md`
 - [x] CVB-010 — Initialized the TypeScript monorepo foundation
+- [x] CVB-011 — Created the Next.js web application
 
 ## In Progress
 
@@ -86,4 +87,4 @@ npm run format:check
 
 ## Next Ticket
 
-CVB-011
+Not started

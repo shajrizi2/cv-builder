@@ -7,7 +7,7 @@ A TypeScript monorepo for a fully Dockerized web-based CV builder.
 ```text
 apps/
   api/           NestJS API placeholder
-  web/           Next.js frontend placeholder
+  web/           Next.js frontend
   worker/        BullMQ worker placeholder
 packages/
   database/      Shared database package placeholder
@@ -22,8 +22,8 @@ infrastructure/
   scripts/       Infrastructure scripts placeholder
 ```
 
-The application and package directories are intentionally empty until their corresponding Jira
-tickets are implemented.
+Application and package placeholders remain empty until their corresponding Jira tickets are
+implemented.
 
 ## Requirements
 
@@ -50,5 +50,32 @@ npm run format
 npm run format:check
 ```
 
-Turborepo orchestrates application and package tasks. Until those workspaces are initialized, the
-build, lint, type-check, and test commands complete without executing package tasks.
+Turborepo orchestrates tasks for each initialized application and package workspace.
+
+## Web application
+
+The Next.js application uses the App Router and is available in `apps/web`.
+
+Start it from the repository root:
+
+```bash
+npm run dev --workspace=@cv-builder/web
+```
+
+Then open:
+
+- Application: `http://localhost:3000`
+- Health check: `http://localhost:3000/api/health`
+
+Run its validation commands independently:
+
+```bash
+npm run lint --workspace=@cv-builder/web
+npm run typecheck --workspace=@cv-builder/web
+npm run test --workspace=@cv-builder/web
+npm run build --workspace=@cv-builder/web
+```
+
+The application currently requires no project-specific environment variables. Public and
+server-side variables are validated separately in `apps/web/lib/env.ts`; optional public values
+must use the `NEXT_PUBLIC_` prefix.
