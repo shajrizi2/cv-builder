@@ -1,0 +1,30 @@
+{
+  "name": "cv-builder",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dockerized web-based CV builder monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=22.13.0",
+    "npm": ">=11.0.0"
+  },
+  "packageManager": "npm@12.0.1",
+  "devDependencies": {
+    "eslint": "10.8.0",
+    "prettier": "3.9.6",
+    "turbo": "2.10.7",
+    "typescript": "7.0.2"
+  }
+}

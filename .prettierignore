@@ -1,0 +1,9 @@
+node_modules
+.next
+dist
+build
+coverage
+.turbo
+package-lock.json
+AGENTS.md
+docs/tasks
