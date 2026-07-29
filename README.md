@@ -79,3 +79,40 @@ npm run build --workspace=@cv-builder/web
 The application currently requires no project-specific environment variables. Public and
 server-side variables are validated separately in `apps/web/lib/env.ts`; optional public values
 must use the `NEXT_PUBLIC_` prefix.
+
+## API application
+
+The NestJS API uses Fastify and is available in `apps/api`.
+
+Copy the example environment configuration when local overrides are needed:
+
+```bash
+cp .env.example .env
+```
+
+Start the API from the repository root:
+
+```bash
+npm run dev --workspace=@cv-builder/api
+```
+
+The development defaults expose:
+
+- Health check: `http://localhost:3001/api/health`
+- Swagger documentation: `http://localhost:3001/api/docs`
+
+Run its validation commands independently:
+
+```bash
+npm run lint --workspace=@cv-builder/api
+npm run typecheck --workspace=@cv-builder/api
+npm run test --workspace=@cv-builder/api
+npm run test:e2e --workspace=@cv-builder/api
+npm run build --workspace=@cv-builder/api
+```
+
+The API validates `NODE_ENV`, `API_PORT`, `API_HOST`, `CORS_ORIGINS`, and
+`SWAGGER_ENABLED` before startup. Swagger defaults to enabled outside production and disabled in
+production. Production requires an explicit comma-separated CORS origin allowlist; wildcard
+origins are rejected. CORS credentials are enabled explicitly and are accepted only for origins in
+that validated allowlist.

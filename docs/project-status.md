@@ -23,6 +23,7 @@ Sprint 1 — Foundation
 - [x] Created `docs/project-status.md`
 - [x] CVB-010 — Initialized the TypeScript monorepo foundation
 - [x] CVB-011 — Created the Next.js web application
+- [x] CVB-012 — Created the NestJS API application
 
 ## In Progress
 
@@ -51,7 +52,7 @@ None
 ## Repository Applications
 
 - `apps/web`
-- `apps/api`
+- `apps/api` — NestJS API using Fastify
 - `apps/worker`
 
 ## Shared Packages
