@@ -76,6 +76,51 @@ npm run test --workspace=@cv-builder/web
 npm run build --workspace=@cv-builder/web
 ```
 
+### Web Docker image
+
+Use the repository root as the Docker build context. Build the standalone production image with:
+
+```bash
+docker build \
+  --file apps/web/Dockerfile \
+  --target production \
+  --tag cv-builder-web:local \
+  .
+```
+
+Run it on port `3000`:
+
+```bash
+docker run --rm --publish 3000:3000 cv-builder-web:local
+```
+
+The image runs the Next.js standalone server as a non-root user. Its internal Docker health check
+requests `http://127.0.0.1:3000/api/health`; inspect the reported state with:
+
+```bash
+docker inspect --format='{{json .State.Health}}' <container-name-or-id>
+```
+
+Build the development target for future bind-mounted development workflows with:
+
+```bash
+docker build \
+  --file apps/web/Dockerfile \
+  --target development \
+  --tag cv-builder-web-dev:local \
+  .
+```
+
+The development target starts Next.js on `0.0.0.0:3000`. Source mounts and Docker Compose
+configuration are intentionally left to later infrastructure tickets.
+
+Server-only environment variables are supplied when the production container runs, for example
+with Docker's `--env` or `--env-file` options; environment files are not copied into the image.
+`PORT` defaults to `3000`, and the standalone server also respects a runtime override. Public
+`NEXT_PUBLIC_*` variables are embedded in browser output by Next.js and therefore must be provided
+while building when a non-default value is required. Do not pass secrets through Docker build
+arguments.
+
 The application currently requires no project-specific environment variables. Public and
 server-side variables are validated separately in `apps/web/lib/env.ts`; optional public values
 must use the `NEXT_PUBLIC_` prefix.
