@@ -116,3 +116,35 @@ The API validates `NODE_ENV`, `API_PORT`, `API_HOST`, `CORS_ORIGINS`, and
 production. Production requires an explicit comma-separated CORS origin allowlist; wildcard
 origins are rejected. CORS credentials are enabled explicitly and are accepted only for origins in
 that validated allowlist.
+
+## Worker application
+
+The BullMQ background worker is available in `apps/worker`. It currently provides the
+`system-test` queue foundation; real document-processing jobs are intentionally outside its scope.
+
+Start it from the repository root:
+
+```bash
+npm run dev --workspace=@cv-builder/worker
+```
+
+The worker validates its Redis connection and lifecycle settings before startup. Local defaults
+connect to `127.0.0.1:6379` without authentication. Optional username, password, TLS, database,
+concurrency, worker name, and shutdown timeout settings are documented in `.env.example`.
+
+Run its validation commands independently:
+
+```bash
+npm run lint --workspace=@cv-builder/worker
+npm run typecheck --workspace=@cv-builder/worker
+npm run test --workspace=@cv-builder/worker
+npm run build --workspace=@cv-builder/worker
+```
+
+Unit tests do not require Redis. Run the isolated Redis/Valkey integration test deliberately with:
+
+```bash
+RUN_WORKER_INTEGRATION_TESTS=true npm run test:integration --workspace=@cv-builder/worker
+```
+
+When explicitly enabled, the integration test fails if Redis or Valkey is unavailable.

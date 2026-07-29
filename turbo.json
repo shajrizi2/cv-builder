@@ -17,6 +17,10 @@
     },
     "test": {
       "dependsOn": ["^test"]
+    },
+    "test:integration": {
+      "cache": false,
+      "env": ["RUN_WORKER_INTEGRATION_TESTS"]
     }
   }
 }

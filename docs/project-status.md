@@ -24,6 +24,7 @@ Sprint 1 — Foundation
 - [x] CVB-010 — Initialized the TypeScript monorepo foundation
 - [x] CVB-011 — Created the Next.js web application
 - [x] CVB-012 — Created the NestJS API application
+- [x] CVB-013 — Created the BullMQ background worker application
 
 ## In Progress
 
