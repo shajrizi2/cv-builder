@@ -162,6 +162,58 @@ production. Production requires an explicit comma-separated CORS origin allowlis
 origins are rejected. CORS credentials are enabled explicitly and are accepted only for origins in
 that validated allowlist.
 
+### API Docker image
+
+Use the repository root as the Docker build context. Build the production image with:
+
+```bash
+docker build \
+  --file apps/api/Dockerfile \
+  --target production \
+  --tag cv-builder-api:local \
+  .
+```
+
+Run it on port `3001` with an explicit production CORS allowlist:
+
+```bash
+docker run \
+  --rm \
+  --publish 3001:3001 \
+  --env CORS_ORIGINS=http://localhost:3000 \
+  cv-builder-api:local
+```
+
+The production image runs the compiled NestJS application as a non-root user. It defaults to
+`NODE_ENV=production`, `API_HOST=0.0.0.0`, and `API_PORT=3001`. The internal Docker health check
+requests `http://127.0.0.1:3001/api/health` and validates the response body.
+
+Swagger remains disabled by default in production. Enable it explicitly when required:
+
+```bash
+docker run \
+  --rm \
+  --publish 3001:3001 \
+  --env CORS_ORIGINS=http://localhost:3000 \
+  --env SWAGGER_ENABLED=true \
+  cv-builder-api:local
+```
+
+Build the development target for future bind-mounted development workflows with:
+
+```bash
+docker build \
+  --file apps/api/Dockerfile \
+  --target development \
+  --tag cv-builder-api-dev:local \
+  .
+```
+
+The development target starts the NestJS watcher on `0.0.0.0:3001`. Source mounts and Docker
+Compose configuration are intentionally left to later infrastructure tickets. Runtime environment
+values should be supplied with Docker's `--env` or `--env-file` options; environment files and
+secrets are not copied into the image.
+
 ## Worker application
 
 The BullMQ background worker is available in `apps/worker`. It currently provides the
