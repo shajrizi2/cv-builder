@@ -305,3 +305,73 @@ Playwright, Puppeteer, OCR, or document-processing jobs. Chromium keeps its sand
 container runtime security profile must permit Chromium to create its sandbox namespaces; prefer a
 narrow seccomp profile granting the required namespace operations rather than disabling Chromium's
 sandbox.
+
+## Docker Compose application stack
+
+Create optional local overrides from the safe example values:
+
+```bash
+cp .env.example .env
+```
+
+Compose reads the root `.env` file for interpolation. It is convenient for non-secret local
+configuration, but it is not production secret management. Compose maps only reviewed variables
+into each service; never put production credentials in this file.
+
+Start the production-like stack in the foreground:
+
+```bash
+docker compose up --build
+```
+
+Use `--detach` to run it in the background. The stack publishes the web application at
+`http://127.0.0.1:3000` and the API at `http://127.0.0.1:3001`. Override the host ports with
+`WEB_PORT` and `API_PORT`. Valkey and the worker remain private on the Compose network, and Valkey
+stores append-only data in the `valkey-data` volume.
+
+The API accepts the comma-separated `CORS_ORIGINS` allowlist. Swagger is disabled by default; set
+`SWAGGER_ENABLED=true` locally to expose `/api/docs`. Keep `WORKER_STOP_GRACE_PERIOD` at least as
+long as `WORKER_SHUTDOWN_TIMEOUT_MS`; the defaults are 35 seconds and 30 seconds respectively.
+
+Start development targets with application-specific source mounts:
+
+```bash
+docker compose \
+  -f compose.yaml \
+  -f compose.dev.yaml \
+  up --build
+```
+
+The override mounts only each application's source, tests, and required configuration files.
+Container `node_modules`, web `.next`, and API/worker `dist` remain inside the images, so host
+dependencies are never mounted and generated files do not pollute the checkout. Native
+Linux/Fedora file watching is used; polling is not enabled.
+
+Useful operating commands:
+
+```bash
+docker compose build
+docker compose up --detach
+docker compose ps
+docker compose logs
+docker compose logs --follow web
+docker compose logs --follow api
+docker compose logs --follow worker
+docker compose logs --follow valkey
+docker compose stop
+docker compose down --remove-orphans
+docker compose down --volumes --remove-orphans
+```
+
+`stop` preserves containers and Valkey data. `down` removes containers and the project network but
+preserves the named volume unless `--volumes` is supplied. Application services retry failed
+starts at most three times; Valkey uses `unless-stopped` as the persistent local dependency.
+After a Valkey restart, BullMQ reconnects and the worker health check returns to healthy once
+Valkey is available.
+
+Validate either configuration without starting services:
+
+```bash
+docker compose config --quiet
+docker compose -f compose.yaml -f compose.dev.yaml config --quiet
+```
