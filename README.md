@@ -245,3 +245,63 @@ RUN_WORKER_INTEGRATION_TESTS=true npm run test:integration --workspace=@cv-build
 ```
 
 When explicitly enabled, the integration test fails if Redis or Valkey is unavailable.
+
+### Worker Docker image
+
+Use the repository root as the Docker build context. Build the minimal production worker with:
+
+```bash
+docker build \
+  --file apps/worker/Dockerfile \
+  --target production \
+  --tag cv-builder-worker:local \
+  .
+```
+
+The image runs `node dist/index.js` directly as UID/GID `1001`. It has no HTTP server and exposes
+no port. Its health check validates the worker environment, connects to Redis or Valkey, requires
+an exact `PONG` response, and closes the health-check connection without modifying queue data.
+Supply Redis connection details when the container starts:
+
+```bash
+docker run \
+  --rm \
+  --env NODE_ENV=production \
+  --env REDIS_HOST=redis \
+  --env REDIS_PORT=6379 \
+  cv-builder-worker:local
+```
+
+The Redis hostname above must resolve from the container network. Credentials, TLS, database,
+concurrency, worker name, and shutdown timeout remain configurable through the variables documented
+in `.env.example`; environment files and secrets are not copied into the image.
+
+Build the development target for future bind-mounted workflows with:
+
+```bash
+docker build \
+  --file apps/worker/Dockerfile \
+  --target development \
+  --tag cv-builder-worker-dev:local \
+  .
+```
+
+The development target runs `npm run dev --workspace=@cv-builder/worker` as UID/GID `1001`.
+Docker Compose and volume configuration remain intentionally outside this ticket.
+
+An optional browser-capable target adds Debian Chromium and Latin, Arabic, and broad Unicode fonts
+without adding those packages to the minimal worker:
+
+```bash
+docker build \
+  --file apps/worker/Dockerfile \
+  --target document-processing \
+  --tag cv-builder-worker-document-processing:local \
+  .
+```
+
+This target keeps the same non-root user, health check, and worker entrypoint. It does not include
+Playwright, Puppeteer, OCR, or document-processing jobs. Chromium keeps its sandbox enabled. The
+container runtime security profile must permit Chromium to create its sandbox namespaces; prefer a
+narrow seccomp profile granting the required namespace operations rather than disabling Chromium's
+sandbox.

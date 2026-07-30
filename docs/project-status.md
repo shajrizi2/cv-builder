@@ -27,6 +27,7 @@ Sprint 1 — Foundation
 - [x] CVB-013 — Created the BullMQ background worker application
 - [x] CVB-014 — Created the Next.js web Dockerfile
 - [x] CVB-015 — Created the NestJS API Dockerfile
+- [x] CVB-016 — Created the BullMQ worker Dockerfile
 
 ## In Progress
 
