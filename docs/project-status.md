@@ -29,6 +29,7 @@ Sprint 1 — Foundation
 - [x] CVB-015 — Created the NestJS API Dockerfile
 - [x] CVB-016 — Created the BullMQ worker Dockerfile
 - [x] CVB-017 — Created the Docker Compose application stack
+- [x] CVB-018 — Created the PostgreSQL and Prisma database foundation
 
 ## In Progress
 

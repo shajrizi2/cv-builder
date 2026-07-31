@@ -10,7 +10,7 @@ apps/
   web/           Next.js frontend
   worker/        BullMQ worker placeholder
 packages/
-  database/      Shared database package placeholder
+  database/      Shared Prisma and PostgreSQL package
   eslint-config/ Shared ESLint flat configuration
   resume-schema/ Shared résumé schema package placeholder
   shared/        Shared utilities package placeholder
@@ -375,3 +375,84 @@ Validate either configuration without starting services:
 docker compose config --quiet
 docker compose -f compose.yaml -f compose.dev.yaml config --quiet
 ```
+
+## PostgreSQL and Prisma
+
+The Compose stack includes PostgreSQL for durable application data. It uses the official
+`postgres:18.4-bookworm` image and the named `postgres-data` volume, which Compose resolves as
+`cv-builder_postgres-data`. PostgreSQL is private on the application network in the production-like
+configuration. The development override publishes it only on
+`127.0.0.1:${POSTGRES_PORT:-5432}` so host-side Prisma commands can connect.
+
+The image metadata resolved on 31 July 2026 is:
+
+- Multi-platform OCI index: `sha256:1961f96e6029a02c3812d7cb329a3b03a3ac2bb067058dec17b0f5596aca9296`
+- Tested Linux AMD64 manifest: `sha256:16fa100a3a6e92c0556632870455e7f8c6f3df5cefddd67d6b95292732bd7ff0`
+
+Create a local ignored `.env` from `.env.example` if desired, and replace its example-only
+password. `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` are required when Compose is
+rendered. The official image uses these values only when initializing an empty volume; changing
+them later does not rotate credentials in an existing database.
+
+Start PostgreSQL for host-side development:
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml up --detach postgres
+```
+
+The `@cv-builder/database` workspace owns the Prisma schema, generated client, and lifecycle
+utilities. Prisma Client is generated into an ignored directory and is created lazily: importing
+the package does not connect to PostgreSQL. `getDatabaseClient()` reuses a process-global client
+during development reloads, while `disconnectDatabase()` explicitly closes it during graceful
+application shutdown. API and worker lifecycle wiring is intentionally deferred to a later ticket.
+
+Use these commands from the repository root:
+
+```bash
+npm run db:generate
+npm run db:format
+npm run db:validate
+npm run db:migrate:dev -- --name MIGRATION_NAME
+npm run db:migrate:status
+npm run db:migrate:deploy
+```
+
+`db:migrate:dev` is only for creating development migrations. `db:migrate:deploy` is the explicit,
+controlled deployment step; application startup never creates or deploys migrations. This ticket
+contains no models and no artificial initial migration. Existing migrations must never be edited
+after application.
+
+Prisma 7 reads `DATABASE_URL` through `packages/database/prisma.config.ts`. Host commands use
+`127.0.0.1` and `POSTGRES_PORT`; a future Compose application will instead need a URL using the
+service hostname `postgres` and port `5432`. Percent-encode special characters in URL usernames or
+passwords. Never expose either URL or PostgreSQL credentials through `NEXT_PUBLIC_*` variables.
+
+Run package checks independently:
+
+```bash
+npm run lint --workspace=@cv-builder/database
+npm run typecheck --workspace=@cv-builder/database
+npm run test --workspace=@cv-builder/database
+npm run build --workspace=@cv-builder/database
+```
+
+Ordinary tests do not connect to PostgreSQL. The integration suite is opt-in and requires a
+distinct isolated database URL; it never falls back to `DATABASE_URL`:
+
+```bash
+RUN_DATABASE_INTEGRATION_TESTS=true \
+TEST_DATABASE_URL='postgresql://user:encoded-password@127.0.0.1:5432/cv_builder_test' \
+npm run test:integration --workspace=@cv-builder/database
+```
+
+No reset command is provided. `docker compose down` retains database data. The destructive command
+below permanently removes PostgreSQL and Valkey volumes and must be run only after confirming the
+data is disposable:
+
+```bash
+docker compose down --volumes --remove-orphans
+```
+
+Production deployments must supply secrets through their deployment secret mechanism, keep
+PostgreSQL off public networks, back up persistent data, and run `db:migrate:deploy` as a controlled
+deployment step rather than as application startup behavior.

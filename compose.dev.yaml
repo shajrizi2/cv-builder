@@ -99,3 +99,7 @@ services:
       - ./apps/worker/tests:/app/apps/worker/tests
       - ./apps/worker/tsconfig.build.json:/app/apps/worker/tsconfig.build.json
       - ./apps/worker/tsconfig.json:/app/apps/worker/tsconfig.json
+
+  postgres:
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
