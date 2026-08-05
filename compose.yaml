@@ -23,12 +23,16 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       target: production
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       API_HOST: 0.0.0.0
       API_PORT: '3001'
       CORS_ORIGINS: '${CORS_ORIGINS:-http://localhost:3000}'
       SWAGGER_ENABLED: '${SWAGGER_ENABLED:-false}'
+      DATABASE_URL: 'postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}'
     init: true
     networks:
       - app-network

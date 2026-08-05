@@ -28,4 +28,25 @@ describe.runIf(integrationEnabled)('PostgreSQL integration', () => {
 
     expect(result).toEqual([{ value: 1 }]);
   });
+
+  it('persists and updates structured resume JSON', async () => {
+    if (testDatabaseUrl === undefined || testDatabaseUrl.trim() === '')
+      throw new Error('TEST_DATABASE_URL is required');
+    client = createDatabaseClient({ databaseUrl: testDatabaseUrl });
+    const created = await client.resume.create({
+      data: { title: 'Integration CV', content: { metadata: { version: 1 } } },
+    });
+    try {
+      const updated = await client.resume.update({
+        where: { id: created.id },
+        data: { title: 'Updated CV', content: { metadata: { version: 1 }, summary: 'Saved' } },
+      });
+      expect(updated.title).toBe('Updated CV');
+      expect(await client.resume.findUnique({ where: { id: created.id } })).toMatchObject({
+        content: { metadata: { version: 1 }, summary: 'Saved' },
+      });
+    } finally {
+      await client.resume.delete({ where: { id: created.id } });
+    }
+  });
 });

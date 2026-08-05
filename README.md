@@ -6,13 +6,13 @@ A TypeScript monorepo for a fully Dockerized web-based CV builder.
 
 ```text
 apps/
-  api/           NestJS API placeholder
-  web/           Next.js frontend
+  api/           NestJS API and resume CRUD
+  web/           Next.js resume dashboard and editor
   worker/        BullMQ worker placeholder
 packages/
   database/      Shared Prisma and PostgreSQL package
   eslint-config/ Shared ESLint flat configuration
-  resume-schema/ Shared résumé schema package placeholder
+  resume-schema/ Canonical runtime-validated résumé domain
   shared/        Shared utilities package placeholder
   templates/     Shared CV templates package placeholder
   validation/    Shared validation package placeholder
@@ -22,8 +22,7 @@ infrastructure/
   scripts/       Infrastructure scripts placeholder
 ```
 
-Application and package placeholders remain empty until their corresponding Jira tickets are
-implemented.
+CVB-020 provides the first complete resume workspace; later capabilities remain placeholders.
 
 ## Requirements
 
@@ -121,9 +120,17 @@ with Docker's `--env` or `--env-file` options; environment files are not copied 
 while building when a non-default value is required. Do not pass secrets through Docker build
 arguments.
 
-The application currently requires no project-specific environment variables. Public and
-server-side variables are validated separately in `apps/web/lib/env.ts`; optional public values
-must use the `NEXT_PUBLIC_` prefix.
+The browser calls `NEXT_PUBLIC_API_URL`, which defaults to `http://localhost:3001/api`.
+`NEXT_PUBLIC_APP_NAME` defaults to `CV Builder`. Public values are embedded at build time and must
+never contain secrets.
+
+### Resume workspace
+
+The home page is the resume dashboard. Users can create, open, rename, and delete resumes. The
+editor at `/resumes/:id` supports personal information, summary, experience, education, skills,
+languages, and links, plus ordering and visibility. Its A4-oriented preview updates immediately.
+Title and content save together after a 700 ms debounce, with unsaved, saving, saved, and failed
+states. Failed saves retain local edits and can be retried.
 
 ## API application
 
@@ -161,6 +168,24 @@ The API validates `NODE_ENV`, `API_PORT`, `API_HOST`, `CORS_ORIGINS`, and
 production. Production requires an explicit comma-separated CORS origin allowlist; wildcard
 origins are rejected. CORS credentials are enabled explicitly and are accepted only for origins in
 that validated allowlist.
+
+Resume routes are `POST /api/resumes`, `GET /api/resumes`, `GET /api/resumes/:id`,
+`PATCH /api/resumes/:id`, and `DELETE /api/resumes/:id`. UUID parameters and strict request bodies
+are validated. Stored JSON and returned resume data are checked against the canonical schema;
+missing records consistently return `404`.
+
+## Resume schema
+
+`@cv-builder/resume-schema` is the framework-free contract used by the web and API. It exports Zod
+schemas, inferred types, section keys, and `createEmptyResumeContent()`. Empty fields remain valid
+for in-progress editing, while malformed shapes, IDs, order, visibility, and limits are rejected.
+
+```bash
+npm run lint --workspace=@cv-builder/resume-schema
+npm run typecheck --workspace=@cv-builder/resume-schema
+npm run test --workspace=@cv-builder/resume-schema
+npm run build --workspace=@cv-builder/resume-schema
+```
 
 ### API Docker image
 
@@ -401,10 +426,11 @@ docker compose -f compose.yaml -f compose.dev.yaml up --detach postgres
 ```
 
 The `@cv-builder/database` workspace owns the Prisma schema, generated client, and lifecycle
-utilities. Prisma Client is generated into an ignored directory and is created lazily: importing
+utilities. The `Resume` model stores validated content as PostgreSQL JSONB with a UUID, title, and
+timestamps. Prisma Client is generated into an ignored directory and is created lazily: importing
 the package does not connect to PostgreSQL. `getDatabaseClient()` reuses a process-global client
 during development reloads, while `disconnectDatabase()` explicitly closes it during graceful
-application shutdown. API and worker lifecycle wiring is intentionally deferred to a later ticket.
+application shutdown. The API closes it during graceful shutdown.
 
 Use these commands from the repository root:
 
@@ -418,13 +444,13 @@ npm run db:migrate:deploy
 ```
 
 `db:migrate:dev` is only for creating development migrations. `db:migrate:deploy` is the explicit,
-controlled deployment step; application startup never creates or deploys migrations. This ticket
-contains no models and no artificial initial migration. Existing migrations must never be edited
-after application.
+controlled deployment step; application startup never creates or deploys migrations. The committed
+`20260803120000_add_resume` migration creates the resume table and updated-time index. Existing
+migrations must never be edited after application.
 
 Prisma 7 reads `DATABASE_URL` through `packages/database/prisma.config.ts`. Host commands use
-`127.0.0.1` and `POSTGRES_PORT`; a future Compose application will instead need a URL using the
-service hostname `postgres` and port `5432`. Percent-encode special characters in URL usernames or
+`127.0.0.1` and `POSTGRES_PORT`; Compose supplies the API a URL using the `postgres` service and
+port `5432`. Percent-encode special characters in URL usernames or
 passwords. Never expose either URL or PostgreSQL credentials through `NEXT_PUBLIC_*` variables.
 
 Run package checks independently:
@@ -456,3 +482,7 @@ docker compose down --volumes --remove-orphans
 Production deployments must supply secrets through their deployment secret mechanism, keep
 PostgreSQL off public networks, back up persistent data, and run `db:migrate:deploy` as a controlled
 deployment step rather than as application startup behavior.
+
+Known MVP limitations: there is one preview template; dates are free-form; autosave does not offer
+multi-client conflict detection; authentication, uploads, AI, history, and PDF generation are out
+of scope.

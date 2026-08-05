@@ -18,7 +18,9 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/worker/package.json ./apps/worker/package.json
+COPY packages/database/package.json ./packages/database/package.json
 COPY packages/eslint-config/package.json ./packages/eslint-config/package.json
+COPY packages/resume-schema/package.json ./packages/resume-schema/package.json
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --workspace=@cv-builder/api --include-workspace-root
@@ -39,8 +41,12 @@ FROM dependencies AS builder
 
 COPY tsconfig.base.json ./
 COPY apps/api ./apps/api
+COPY packages/database ./packages/database
+COPY packages/resume-schema ./packages/resume-schema
 
-RUN npm run build --workspace=@cv-builder/api \
+RUN npm run build --workspace=@cv-builder/resume-schema \
+    && npm run build --workspace=@cv-builder/database \
+    && npm run build --workspace=@cv-builder/api \
     && find apps/api/dist -type f ! -name '*.js' -delete
 
 FROM toolchain AS production-dependencies
@@ -51,11 +57,13 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/worker/package.json ./apps/worker/package.json
+COPY packages/database/package.json ./packages/database/package.json
 COPY packages/eslint-config/package.json ./packages/eslint-config/package.json
+COPY packages/resume-schema/package.json ./packages/resume-schema/package.json
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev --workspace=@cv-builder/api --include-workspace-root \
-    && node -e "const fs = require('node:fs'); const root = require('./package.json'); const api = require('./apps/api/package.json'); delete root.workspaces; delete root.devDependencies; root.dependencies = api.dependencies; fs.writeFileSync('package.json', JSON.stringify(root));" \
+    && node -e "const fs = require('node:fs'); const root = require('./package.json'); const api = require('./apps/api/package.json'); const database = require('./packages/database/package.json'); const resume = require('./packages/resume-schema/package.json'); delete root.workspaces; delete root.devDependencies; root.dependencies = { ...api.dependencies, ...database.dependencies, ...resume.dependencies }; fs.writeFileSync('package.json', JSON.stringify(root));" \
     && rm package-lock.json \
     && npm prune --omit=dev --workspaces=false --package-lock=false \
     && npm ls --omit=dev
@@ -73,6 +81,10 @@ RUN groupadd --system --gid 1001 nodejs \
 
 COPY --from=production-dependencies --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=production-dependencies --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/package.json
+COPY --from=builder --chown=nestjs:nodejs /app/packages/database/package.json ./packages/database/package.json
+COPY --from=builder --chown=nestjs:nodejs /app/packages/database/dist ./packages/database/dist
+COPY --from=builder --chown=nestjs:nodejs /app/packages/resume-schema/package.json ./packages/resume-schema/package.json
+COPY --from=builder --chown=nestjs:nodejs /app/packages/resume-schema/dist ./packages/resume-schema/dist
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
 
 WORKDIR /app/apps/api
