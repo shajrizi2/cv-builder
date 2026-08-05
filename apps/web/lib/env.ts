@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const publicEnvSchema = z.object({
   NEXT_PUBLIC_APP_NAME: z.string().trim().min(1).default('CV Builder'),
+  NEXT_PUBLIC_API_URL: z.string().url().default('http://localhost:3001/api'),
 });
 
 const serverEnvSchema = z.object({
@@ -17,6 +18,7 @@ export function parsePublicEnv(
 ): z.infer<typeof publicEnvSchema> {
   const result = publicEnvSchema.safeParse({
     NEXT_PUBLIC_APP_NAME: input.NEXT_PUBLIC_APP_NAME,
+    NEXT_PUBLIC_API_URL: input.NEXT_PUBLIC_API_URL,
   });
 
   if (!result.success) {
@@ -42,6 +44,7 @@ export function parseServerEnv(
 
 export const publicEnv = parsePublicEnv({
   NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
+  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
 });
 
 export function getServerEnv() {

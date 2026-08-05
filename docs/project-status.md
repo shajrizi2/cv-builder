@@ -6,11 +6,11 @@ Dockerized Web-Based CV Builder
 
 ## Current Phase
 
-Project setup and repository foundation
+MVP core resume workspace
 
 ## Current Sprint
 
-Sprint 1 — Foundation
+Sprint 2 — MVP Core
 
 ## Completed
 
@@ -30,6 +30,7 @@ Sprint 1 — Foundation
 - [x] CVB-016 — Created the BullMQ worker Dockerfile
 - [x] CVB-017 — Created the Docker Compose application stack
 - [x] CVB-018 — Created the PostgreSQL and Prisma database foundation
+- [x] CVB-020 — Built the resume workspace vertical slice
 
 ## In Progress
 
@@ -95,3 +96,11 @@ npm run format:check
 ## Next Ticket
 
 Not started
+
+## CVB-020 Delivered Architecture
+
+- `@cv-builder/resume-schema` is the canonical runtime and type contract.
+- PostgreSQL stores each validated resume document as JSONB in the `Resume` model.
+- NestJS exposes strict CRUD below `/api/resumes`.
+- Next.js provides the dashboard, responsive editor, debounced autosave, and one live A4 preview.
+- Authentication, imports, AI, PDF export, and multiple templates remain out of scope.
