@@ -37,6 +37,77 @@ Install the workspace dependencies:
 npm install
 ```
 
+### Start locally with an external Neon database
+
+The resume workspace can run on the local machine while persisting resumes in Neon. It does not
+need the bundled PostgreSQL, Redis, or worker services for this workflow.
+
+Create the ignored root environment file and replace `DATABASE_URL` with the connection string
+copied from the Neon dashboard:
+
+```bash
+cp .env.example .env
+```
+
+Use a pooled Neon connection string for the running API. It should include TLS parameters similar
+to `sslmode=require&channel_binding=require`. Quote values containing spaces or shell characters
+when the file will be loaded with `source`:
+
+```dotenv
+NODE_ENV=production
+PORT=3000
+HOSTNAME=0.0.0.0
+API_HOST=0.0.0.0
+API_PORT=3001
+CORS_ORIGINS=http://localhost:3000
+NEXT_PUBLIC_APP_NAME='CV Builder'
+NEXT_PUBLIC_API_URL=http://localhost:3001/api
+DATABASE_URL='postgresql://USER:PASSWORD@NEON_HOST/neondb?sslmode=require&channel_binding=require'
+```
+
+Load and export the root environment in the terminal before using workspace scripts:
+
+```bash
+set -a
+source .env
+set +a
+```
+
+The quotes are required for values such as `CV Builder` and URLs containing `&`; without them,
+`source` interprets parts of those values as shell commands.
+
+Apply committed migrations once for a new Neon database, then build the applications:
+
+```bash
+npm run db:migrate:deploy
+npm run db:migrate:status
+npm run build
+```
+
+Start the compiled API in the first terminal:
+
+```bash
+set -a
+source .env
+set +a
+npm run start --workspace=@cv-builder/api
+```
+
+Start the web application in a second terminal:
+
+```bash
+npm run start --workspace=@cv-builder/web
+```
+
+Open `http://localhost:3000`. The API health endpoint is
+`http://localhost:3001/api/health`. Application startup never deploys migrations automatically;
+run `db:migrate:deploy` again only when a later change adds a new committed migration.
+
+The complete `compose.yaml` stack is intended for the bundled PostgreSQL service and injects its
+internal database URL into the API. Do not use that complete stack unchanged when the API should
+connect to Neon; start the applications as shown above or run the individual production images
+with `--env-file .env`.
+
 ## Root commands
 
 ```bash
