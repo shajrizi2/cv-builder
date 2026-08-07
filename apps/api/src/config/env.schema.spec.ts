@@ -10,6 +10,12 @@ describe('validateEnvironment', () => {
       apiHost: '0.0.0.0',
       corsOrigins: ['http://localhost:3000'],
       swaggerEnabled: true,
+      redisPort: 6379,
+      redisTls: false,
+      redisDatabase: 0,
+      minioPort: 9000,
+      minioUseSsl: false,
+      minioBucket: 'cv-imports',
     });
   });
 
@@ -28,6 +34,12 @@ describe('validateEnvironment', () => {
       apiHost: '127.0.0.1',
       corsOrigins: ['https://example.com', 'http://localhost:3000'],
       swaggerEnabled: false,
+      redisPort: 6379,
+      redisTls: false,
+      redisDatabase: 0,
+      minioPort: 9000,
+      minioUseSsl: false,
+      minioBucket: 'cv-imports',
     });
   });
 
@@ -84,5 +96,46 @@ describe('validateEnvironment', () => {
         SWAGGER_ENABLED: 'true',
       }).swaggerEnabled,
     ).toBe(true);
+  });
+
+  it('parses complete Redis queue connection configuration', () => {
+    expect(
+      validateEnvironment({
+        REDIS_HOST: 'redis.internal',
+        REDIS_PORT: '6380',
+        REDIS_USERNAME: 'importer',
+        REDIS_PASSWORD: 'secret',
+        REDIS_TLS: 'true',
+        REDIS_DB: '4',
+      }),
+    ).toMatchObject({
+      redisHost: 'redis.internal',
+      redisPort: 6380,
+      redisUsername: 'importer',
+      redisPassword: 'secret',
+      redisTls: true,
+      redisDatabase: 4,
+    });
+  });
+
+  it('rejects a Redis username without a password without exposing the username', () => {
+    const username = 'private-import-user';
+    expect(() => validateEnvironment({ REDIS_USERNAME: username })).toThrow(
+      'REDIS_PASSWORD is required',
+    );
+    try {
+      validateEnvironment({ REDIS_USERNAME: username });
+    } catch (error) {
+      expect(String(error)).not.toContain(username);
+    }
+  });
+
+  it.each([
+    ['REDIS_DB', '-1'],
+    ['REDIS_TLS', 'yes'],
+  ])('rejects invalid import Redis option %s=%s', (key, value) => {
+    expect(() => validateEnvironment({ [key]: value })).toThrow(
+      'Invalid environment configuration',
+    );
   });
 });

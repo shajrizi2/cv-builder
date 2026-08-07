@@ -8,11 +8,37 @@ datasource db {
 }
 
 model Resume {
-  id        String   @id @default(uuid()) @db.Uuid
-  title     String   @db.VarChar(200)
-  content   Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String        @id @default(uuid()) @db.Uuid
+  title        String        @db.VarChar(200)
+  content      Json
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sourceImport ResumeImport?
 
   @@index([updatedAt])
+}
+
+enum ResumeImportStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ResumeImport {
+  id               String             @id @default(uuid()) @db.Uuid
+  originalFilename String             @db.VarChar(255)
+  mimeType         String             @db.VarChar(100)
+  fileSize         Int
+  objectKey        String             @unique @db.VarChar(512)
+  status           ResumeImportStatus @default(QUEUED)
+  errorCode        String?            @db.VarChar(100)
+  errorMessage     String?            @db.VarChar(500)
+  resumeId         String?            @unique @db.Uuid
+  resume           Resume?            @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([createdAt])
+  @@index([status, updatedAt])
 }

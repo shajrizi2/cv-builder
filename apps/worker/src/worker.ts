@@ -1,4 +1,5 @@
 import type { WorkerConfiguration } from './config/configuration.js';
+import { RESUME_IMPORT_QUEUE_NAME } from '@cv-builder/resume-schema';
 import { WorkerHealth } from './health/worker-health.js';
 import type { Logger } from './logging/logger.js';
 import { createWorkerResources, type WorkerResources } from './queues/queue.factory.js';
@@ -27,7 +28,11 @@ export class WorkerApplication {
     try {
       const resources = this.resourcesFactory(this.config, this.logger);
       this.resources = resources;
-      await Promise.all([resources.queue.waitUntilReady(), resources.worker.waitUntilReady()]);
+      await Promise.all([
+        resources.queue.waitUntilReady(),
+        resources.worker.waitUntilReady(),
+        ...(resources.importWorker ? [resources.importWorker.waitUntilReady()] : []),
+      ]);
       this.health.markReady();
       this.logger.info('worker.ready', { queueName: SYSTEM_TEST_QUEUE_NAME });
     } catch (error) {
@@ -83,30 +88,38 @@ export class WorkerApplication {
       return;
     }
 
+    const workers = [resources.worker, ...(resources.importWorker ? [resources.importWorker] : [])];
     let workerFailure: unknown;
 
-    try {
-      if (!forceImmediately) {
-        await resources.worker.pause(true);
-        const gracefulClose = resources.worker.close();
-        const completed = await this.waitForGracefulClose(gracefulClose);
+    if (forceImmediately) {
+      const forced = await Promise.allSettled(workers.map((worker) => worker.close(true)));
+      workerFailure = forced.find((result) => result.status === 'rejected')?.reason;
+    } else {
+      const pauses = await Promise.allSettled(workers.map((worker) => worker.pause(true)));
+      workerFailure = pauses.find((result) => result.status === 'rejected')?.reason;
 
-        if (!completed) {
-          this.logger.error('worker.shutdown-timeout', {
-            queueName: SYSTEM_TEST_QUEUE_NAME,
-          });
-          await resources.worker.close(true);
-        }
-      } else {
-        await resources.worker.close(true);
+      if (workerFailure === undefined) {
+        const closes = await Promise.all(
+          workers.map(async (worker, index): Promise<unknown> => {
+            try {
+              const completed = await this.waitForGracefulClose(worker.close());
+              if (!completed) {
+                this.logger.error('worker.shutdown-timeout', {
+                  queueName: index === 0 ? SYSTEM_TEST_QUEUE_NAME : RESUME_IMPORT_QUEUE_NAME,
+                });
+                await worker.close(true);
+              }
+              return undefined;
+            } catch (error) {
+              return error;
+            }
+          }),
+        );
+        workerFailure = closes.find((error) => error !== undefined);
       }
-    } catch (error) {
-      workerFailure = error;
 
-      try {
-        await resources.worker.close(true);
-      } catch {
-        // The original worker cleanup error is retained and reported after all other cleanup.
+      if (workerFailure !== undefined) {
+        await Promise.allSettled(workers.map((worker) => worker.close(true)));
       }
     }
 
@@ -114,6 +127,8 @@ export class WorkerApplication {
       resources.queue.close(),
       resources.queueConnection.quit(),
       resources.workerConnection.quit(),
+      ...(resources.importWorkerConnection ? [resources.importWorkerConnection.quit()] : []),
+      ...(resources.disconnectDatabase ? [resources.disconnectDatabase()] : []),
     ]);
     this.resources = undefined;
 

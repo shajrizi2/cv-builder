@@ -22,6 +22,18 @@ export interface Environment {
   apiHost: string;
   corsOrigins: string[];
   swaggerEnabled: boolean;
+  redisHost?: string;
+  redisPort: number;
+  redisUsername?: string;
+  redisPassword?: string;
+  redisTls: boolean;
+  redisDatabase: number;
+  minioEndpoint?: string;
+  minioPort: number;
+  minioUseSsl: boolean;
+  minioAccessKey?: string;
+  minioSecretKey?: string;
+  minioBucket: string;
 }
 
 function parseBoolean(value: unknown): unknown {
@@ -65,6 +77,30 @@ class EnvironmentVariables {
   @IsBoolean()
   @IsOptional()
   SWAGGER_ENABLED?: boolean;
+
+  @IsString() @IsOptional() REDIS_HOST?: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(65_535) @IsOptional() REDIS_PORT?: number;
+  @IsString() @IsOptional() REDIS_USERNAME?: string;
+  @IsString() @IsOptional() REDIS_PASSWORD?: string;
+  @Transform(({ value }: { value: unknown }) => parseBoolean(value))
+  @IsBoolean()
+  @IsOptional()
+  REDIS_TLS?: boolean;
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  @IsOptional()
+  REDIS_DB?: number;
+  @IsString() @IsOptional() MINIO_ENDPOINT?: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(65_535) @IsOptional() MINIO_PORT?: number;
+  @Transform(({ value }: { value: unknown }) => parseBoolean(value))
+  @IsBoolean()
+  @IsOptional()
+  MINIO_USE_SSL?: boolean;
+  @IsString() @IsOptional() MINIO_ACCESS_KEY?: string;
+  @IsString() @IsOptional() MINIO_SECRET_KEY?: string;
+  @IsString() @IsOptional() MINIO_BUCKET?: string;
 }
 
 function normalizeOrigin(origin: string): string {
@@ -127,6 +163,11 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   }
 
   const nodeEnv = validated.NODE_ENV ?? 'development';
+  const redisUsername = validated.REDIS_USERNAME?.trim() || undefined;
+  const redisPassword = validated.REDIS_PASSWORD?.trim() || undefined;
+  if (redisUsername !== undefined && redisPassword === undefined) {
+    throw new Error('REDIS_PASSWORD is required when REDIS_USERNAME is configured');
+  }
 
   return {
     nodeEnv,
@@ -134,5 +175,21 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     apiHost: validated.API_HOST?.trim() || '0.0.0.0',
     corsOrigins: parseCorsOrigins(validated.CORS_ORIGINS, nodeEnv),
     swaggerEnabled: validated.SWAGGER_ENABLED ?? nodeEnv !== 'production',
+    ...(validated.REDIS_HOST?.trim() ? { redisHost: validated.REDIS_HOST.trim() } : {}),
+    redisPort: validated.REDIS_PORT ?? 6379,
+    ...(redisUsername === undefined ? {} : { redisUsername }),
+    ...(redisPassword === undefined ? {} : { redisPassword }),
+    redisTls: validated.REDIS_TLS ?? false,
+    redisDatabase: validated.REDIS_DB ?? 0,
+    ...(validated.MINIO_ENDPOINT?.trim() ? { minioEndpoint: validated.MINIO_ENDPOINT.trim() } : {}),
+    minioPort: validated.MINIO_PORT ?? 9000,
+    minioUseSsl: validated.MINIO_USE_SSL ?? false,
+    ...(validated.MINIO_ACCESS_KEY?.trim()
+      ? { minioAccessKey: validated.MINIO_ACCESS_KEY.trim() }
+      : {}),
+    ...(validated.MINIO_SECRET_KEY?.trim()
+      ? { minioSecretKey: validated.MINIO_SECRET_KEY.trim() }
+      : {}),
+    minioBucket: validated.MINIO_BUCKET?.trim() || 'cv-imports',
   };
 }

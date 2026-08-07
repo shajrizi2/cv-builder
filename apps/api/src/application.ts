@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import multipart from '@fastify/multipart';
 
 import { AppModule } from './app.module';
 import type { ApplicationConfiguration } from './config/configuration';
@@ -10,6 +11,8 @@ import type { Environment } from './config/env.schema';
 
 export async function createApplication(): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
+
+  await app.register(multipart, { limits: { files: 1, fileSize: 10 * 1024 * 1024 } });
 
   configureApplication(app);
   return app;

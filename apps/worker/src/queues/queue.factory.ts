@@ -1,5 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
+import { RESUME_IMPORT_QUEUE_NAME } from '@cv-builder/resume-schema';
 
 import type { WorkerConfiguration } from '../config/configuration.js';
 import type { Logger } from '../logging/logger.js';
@@ -9,12 +10,20 @@ import {
   type TestJobResult,
 } from '../processors/test.processor.js';
 import { SYSTEM_TEST_QUEUE_NAME } from './queue.constants.js';
+import { createDatabaseClient } from '@cv-builder/database';
+import { Client } from 'minio';
+import { OpenAiResumeMapper } from '../ai/openai-resume-mapper.js';
+import { createResumeImportProcessor } from '../processors/resume-import.processor.js';
+import { UnavailableResumeMapper } from '../ai/unavailable-resume-mapper.js';
 
 export interface WorkerResources {
   readonly queue: Queue<TestJobData, TestJobResult>;
   readonly queueConnection: Redis;
   readonly worker: Worker<TestJobData, TestJobResult>;
   readonly workerConnection: Redis;
+  readonly importWorker?: Worker;
+  readonly importWorkerConnection?: Redis;
+  readonly disconnectDatabase?: () => Promise<void>;
 }
 
 export function createWorkerResources(
@@ -62,5 +71,45 @@ export function createWorkerResources(
     });
   });
 
-  return { queue, queueConnection, worker, workerConnection };
+  if (!config.databaseUrl || !config.storage)
+    return { queue, queueConnection, worker, workerConnection };
+  const database = createDatabaseClient({ databaseUrl: config.databaseUrl });
+  const minio = new Client(config.storage);
+  const importWorkerConnection = new Redis({
+    ...config.redisConnection,
+    maxRetriesPerRequest: null,
+  });
+  const mapper = config.openai
+    ? new OpenAiResumeMapper(config.openai.model, config.openai.apiKey, config.openai.timeoutMs)
+    : new UnavailableResumeMapper();
+  const importWorker = new Worker(
+    RESUME_IMPORT_QUEUE_NAME,
+    createResumeImportProcessor(
+      database,
+      {
+        async get(key: string): Promise<Buffer> {
+          const stream = await minio.getObject(config.storage!.bucket, key);
+          const chunks: Buffer[] = [];
+          for await (const chunk of stream)
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+          return Buffer.concat(chunks);
+        },
+      },
+      mapper,
+    ),
+    {
+      connection: importWorkerConnection,
+      concurrency: config.concurrency,
+      name: config.workerName,
+    },
+  );
+  return {
+    queue,
+    queueConnection,
+    worker,
+    workerConnection,
+    importWorker,
+    importWorkerConnection,
+    disconnectDatabase: () => database.$disconnect(),
+  };
 }

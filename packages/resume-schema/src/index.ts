@@ -96,6 +96,70 @@ export const updateResumeInputSchema = z
     message: 'At least one field must be provided',
   });
 
+export const resumeImportStatuses = ['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED'] as const;
+export const resumeImportStatusSchema = z.enum(resumeImportStatuses);
+export const supportedResumeImportMimeTypes = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+] as const;
+export const supportedResumeImportMimeTypeSchema = z.enum(supportedResumeImportMimeTypes);
+export const resumeImportErrorCodes = [
+  'IMPORT_INFRASTRUCTURE_UNAVAILABLE',
+  'INVALID_FILE',
+  'NO_SELECTABLE_TEXT',
+  'ENCRYPTED_DOCUMENT',
+  'CORRUPT_DOCUMENT',
+  'DOCUMENT_TOO_COMPLEX',
+  'AI_MAPPING_FAILED',
+  'AI_PROVIDER_UNAVAILABLE',
+  'AI_PROVIDER_ERROR',
+  'AI_INVALID_RESPONSE',
+  'CANONICAL_MAPPING_FAILED',
+  'PROCESSING_FAILED',
+] as const;
+export const resumeImportErrorCodeSchema = z.enum(resumeImportErrorCodes);
+
+export const resumeImportJobPayloadSchema = z.object({ importId: id }).strict();
+export const RESUME_IMPORT_QUEUE_NAME = 'resume-import';
+export const RESUME_IMPORT_JOB_NAME = 'process-resume-import';
+
+export const resumeImportSchema = z
+  .object({
+    id,
+    originalFilename: z.string().min(1).max(255),
+    mimeType: supportedResumeImportMimeTypeSchema,
+    fileSize: z
+      .number()
+      .int()
+      .positive()
+      .max(10 * 1024 * 1024),
+    status: resumeImportStatusSchema,
+    errorCode: resumeImportErrorCodeSchema.nullable(),
+    errorMessage: z.string().max(500).nullable(),
+    resumeId: id.nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict();
+
+const aiExperienceSchema = experienceSchema.omit({ id: true });
+const aiEducationSchema = educationSchema.omit({ id: true });
+const aiSkillSchema = skillSchema.omit({ id: true });
+const aiLanguageSchema = languageSchema.omit({ id: true });
+const aiLinkSchema = linkSchema.omit({ id: true });
+
+export const aiResumeCandidateSchema = z
+  .object({
+    personalInfo: personalInfoSchema,
+    summary: text,
+    experience: z.array(aiExperienceSchema).max(100),
+    education: z.array(aiEducationSchema).max(100),
+    skills: z.array(aiSkillSchema).max(200),
+    languages: z.array(aiLanguageSchema).max(100),
+    links: z.array(aiLinkSchema).max(100),
+  })
+  .strict();
+
 export type ResumeSectionKey = z.infer<typeof resumeSectionKeySchema>;
 export type ResumeContent = z.infer<typeof resumeContentSchema>;
 export type Resume = z.infer<typeof resumeSchema>;
@@ -106,6 +170,12 @@ export type Education = ResumeContent['education'][number];
 export type Skill = ResumeContent['skills'][number];
 export type Language = ResumeContent['languages'][number];
 export type ResumeLink = ResumeContent['links'][number];
+export type ResumeImportStatus = z.infer<typeof resumeImportStatusSchema>;
+export type SupportedResumeImportMimeType = z.infer<typeof supportedResumeImportMimeTypeSchema>;
+export type ResumeImportErrorCode = z.infer<typeof resumeImportErrorCodeSchema>;
+export type ResumeImportJobPayload = z.infer<typeof resumeImportJobPayloadSchema>;
+export type ResumeImport = z.infer<typeof resumeImportSchema>;
+export type AiResumeCandidate = z.infer<typeof aiResumeCandidateSchema>;
 
 export function createEmptyResumeContent(): ResumeContent {
   return {

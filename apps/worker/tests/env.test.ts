@@ -108,4 +108,57 @@ describe('worker environment', () => {
       'Invalid worker environment configuration',
     );
   });
+
+  it('accepts complete storage configuration', () => {
+    expect(
+      validateEnvironment({
+        MINIO_ENDPOINT: 'minio',
+        MINIO_ACCESS_KEY: 'access',
+        MINIO_SECRET_KEY: 'secret',
+        MINIO_PORT: '9001',
+        MINIO_USE_SSL: 'true',
+        MINIO_BUCKET: 'private-imports',
+      }).storage,
+    ).toEqual({
+      endPoint: 'minio',
+      port: 9001,
+      useSSL: true,
+      accessKey: 'access',
+      secretKey: 'secret',
+      bucket: 'private-imports',
+    });
+  });
+
+  it.each([
+    { MINIO_ENDPOINT: 'minio' },
+    { MINIO_ACCESS_KEY: 'access', MINIO_SECRET_KEY: 'secret' },
+    { MINIO_PORT: '9001' },
+  ])('rejects partial storage configuration %#', (partial) => {
+    expect(() => validateEnvironment(partial)).toThrow('complete or absent');
+  });
+
+  it('accepts complete OpenAI configuration', () => {
+    expect(
+      validateEnvironment({ OPENAI_API_KEY: 'key', OPENAI_MODEL: 'configured-model' }).openai,
+    ).toEqual({ apiKey: 'key', model: 'configured-model', timeoutMs: 30_000 });
+  });
+
+  it('rejects an OpenAI API key without a model', () => {
+    expect(() => validateEnvironment({ OPENAI_API_KEY: 'key' })).toThrow(
+      'must be configured together',
+    );
+  });
+
+  it('rejects an OpenAI model without an API key', () => {
+    expect(() => validateEnvironment({ OPENAI_MODEL: 'model' })).toThrow(
+      'must be configured together',
+    );
+  });
+
+  it('keeps system-test development available without import configuration', () => {
+    const result = validateEnvironment({});
+    expect(result.storage).toBeUndefined();
+    expect(result.openai).toBeUndefined();
+    expect(result.databaseUrl).toBeUndefined();
+  });
 });

@@ -51,8 +51,15 @@ function createHarness(): {
     pause: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
   };
+  importWorker: {
+    waitUntilReady: ReturnType<typeof vi.fn>;
+    pause: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+  };
   queueConnection: { quit: ReturnType<typeof vi.fn> };
   workerConnection: { quit: ReturnType<typeof vi.fn> };
+  importWorkerConnection: { quit: ReturnType<typeof vi.fn> };
+  disconnectDatabase: ReturnType<typeof vi.fn>;
 } {
   const queue = {
     waitUntilReady: vi.fn().mockResolvedValue(undefined),
@@ -63,13 +70,23 @@ function createHarness(): {
     pause: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
+  const importWorker = {
+    waitUntilReady: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  };
   const queueConnection = { quit: vi.fn().mockResolvedValue('OK') };
   const workerConnection = { quit: vi.fn().mockResolvedValue('OK') };
+  const importWorkerConnection = { quit: vi.fn().mockResolvedValue('OK') };
+  const disconnectDatabase = vi.fn().mockResolvedValue(undefined);
   const resources = {
     queue: queue as unknown as Queue<TestJobData, TestJobResult>,
     worker: worker as unknown as Worker<TestJobData, TestJobResult>,
+    importWorker: importWorker as unknown as Worker,
     queueConnection: queueConnection as unknown as Redis,
     workerConnection: workerConnection as unknown as Redis,
+    importWorkerConnection: importWorkerConnection as unknown as Redis,
+    disconnectDatabase,
   } satisfies WorkerResources;
   const logger: Logger = {
     info: vi.fn(),
@@ -77,16 +94,28 @@ function createHarness(): {
   };
   const application = new WorkerApplication(config, logger, () => resources);
 
-  return { application, logger, queue, worker, queueConnection, workerConnection };
+  return {
+    application,
+    logger,
+    queue,
+    worker,
+    importWorker,
+    queueConnection,
+    workerConnection,
+    importWorkerConnection,
+    disconnectDatabase,
+  };
 }
 
 describe('WorkerApplication', () => {
-  it('reports ready only after both BullMQ resources connect', async () => {
-    const { application, queue, worker } = createHarness();
+  it('reports ready only after every created BullMQ resource connects', async () => {
+    const { application, queue, worker, importWorker } = createHarness();
     const queueReady = deferred<void>();
     const workerReady = deferred<void>();
+    const importWorkerReady = deferred<void>();
     queue.waitUntilReady.mockReturnValue(queueReady.promise);
     worker.waitUntilReady.mockReturnValue(workerReady.promise);
+    importWorker.waitUntilReady.mockReturnValue(importWorkerReady.promise);
 
     const starting = application.start();
     expect(application.health.getSnapshot().status).toBe('starting');
@@ -94,13 +123,25 @@ describe('WorkerApplication', () => {
     await Promise.resolve();
     expect(application.health.getSnapshot().status).toBe('starting');
     workerReady.resolve(undefined);
+    await Promise.resolve();
+    expect(application.health.getSnapshot().status).toBe('starting');
+    importWorkerReady.resolve(undefined);
     await starting;
 
     expect(application.health.getSnapshot().status).toBe('ready');
   });
 
   it('reuses one shutdown promise and closes every resource', async () => {
-    const { application, queue, worker, queueConnection, workerConnection } = createHarness();
+    const {
+      application,
+      queue,
+      worker,
+      importWorker,
+      queueConnection,
+      workerConnection,
+      importWorkerConnection,
+      disconnectDatabase,
+    } = createHarness();
     await application.start();
 
     const firstShutdown = application.shutdown();
@@ -110,9 +151,13 @@ describe('WorkerApplication', () => {
     await firstShutdown;
     expect(worker.pause).toHaveBeenCalledWith(true);
     expect(worker.close).toHaveBeenCalledWith();
+    expect(importWorker.pause).toHaveBeenCalledWith(true);
+    expect(importWorker.close).toHaveBeenCalledWith();
     expect(queue.close).toHaveBeenCalledOnce();
     expect(queueConnection.quit).toHaveBeenCalledOnce();
     expect(workerConnection.quit).toHaveBeenCalledOnce();
+    expect(importWorkerConnection.quit).toHaveBeenCalledOnce();
+    expect(disconnectDatabase).toHaveBeenCalledOnce();
     expect(application.health.getSnapshot().status).toBe('stopped');
   });
 
@@ -140,6 +185,48 @@ describe('WorkerApplication', () => {
     expect(worker.close).toHaveBeenNthCalledWith(1);
     expect(worker.close).toHaveBeenNthCalledWith(2, true);
     vi.useRealTimers();
+  });
+
+  it('force-closes an import worker that exceeds the graceful timeout', async () => {
+    vi.useFakeTimers();
+    const { application, worker, importWorker } = createHarness();
+    importWorker.close
+      .mockReturnValueOnce(new Promise<void>(() => undefined))
+      .mockResolvedValueOnce(undefined);
+    await application.start();
+
+    const shutdown = application.shutdown();
+    await vi.advanceTimersByTimeAsync(config.shutdownTimeoutMs);
+    await shutdown;
+
+    expect(worker.close).toHaveBeenCalledWith();
+    expect(importWorker.close).toHaveBeenNthCalledWith(1);
+    expect(importWorker.close).toHaveBeenNthCalledWith(2, true);
+    vi.useRealTimers();
+  });
+
+  it('force-closes both workers and all resources after import cleanup failure', async () => {
+    const {
+      application,
+      worker,
+      importWorker,
+      queue,
+      queueConnection,
+      workerConnection,
+      importWorkerConnection,
+      disconnectDatabase,
+    } = createHarness();
+    importWorker.pause.mockRejectedValue(new Error('import pause failed'));
+    await application.start();
+
+    await expect(application.shutdown()).rejects.toThrow('import pause failed');
+    expect(worker.close).toHaveBeenCalledWith(true);
+    expect(importWorker.close).toHaveBeenCalledWith(true);
+    expect(queue.close).toHaveBeenCalledOnce();
+    expect(queueConnection.quit).toHaveBeenCalledOnce();
+    expect(workerConnection.quit).toHaveBeenCalledOnce();
+    expect(importWorkerConnection.quit).toHaveBeenCalledOnce();
+    expect(disconnectDatabase).toHaveBeenCalledOnce();
   });
 
   it('closes queue connections even when worker cleanup fails', async () => {

@@ -82,6 +82,34 @@ a {
   padding: 4rem 1rem;
   text-align: center;
 }
+.import-panel {
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.8rem;
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+}
+.import-panel h2 {
+  margin-top: 0;
+}
+.import-panel ul {
+  padding-left: 1.25rem;
+}
+.file-action {
+  display: inline-block;
+  border-radius: 0.5rem;
+  background: #155e75;
+  color: white;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+}
+.file-action input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
 .resume-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
