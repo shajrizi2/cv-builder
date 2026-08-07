@@ -8,6 +8,9 @@ const api = vi.hoisted(() => ({
   createResume: vi.fn(),
   updateResume: vi.fn(),
   deleteResume: vi.fn(),
+  listResumeImports: vi.fn(),
+  getResumeImport: vi.fn(),
+  createResumeImport: vi.fn(),
 }));
 vi.mock('@/lib/resumes-api', () => api);
 const resume = {
@@ -21,6 +24,7 @@ const resume = {
 beforeEach(() => {
   vi.clearAllMocks();
   api.listResumes.mockResolvedValue([]);
+  api.listResumeImports.mockResolvedValue([]);
 });
 describe('resume dashboard', () => {
   it('shows loading then the empty state', async () => {

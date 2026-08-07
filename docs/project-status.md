@@ -31,6 +31,7 @@ Sprint 2 — MVP Core
 - [x] CVB-017 — Created the Docker Compose application stack
 - [x] CVB-018 — Created the PostgreSQL and Prisma database foundation
 - [x] CVB-020 — Built the resume workspace vertical slice
+- [x] CVB-021 — Existing CV upload and AI import
 
 ## In Progress
 
@@ -103,4 +104,11 @@ Not started
 - PostgreSQL stores each validated resume document as JSONB in the `Resume` model.
 - NestJS exposes strict CRUD below `/api/resumes`.
 - Next.js provides the dashboard, responsive editor, debounced autosave, and one live A4 preview.
-- Authentication, imports, AI, PDF export, and multiple templates remain out of scope.
+- Authentication, OCR, PDF export, and multiple templates remain out of scope.
+
+## CVB-021 Delivered Architecture
+
+- Private PDF/DOCX uploads are validated and stored in MinIO.
+- A dedicated BullMQ queue extracts selectable text and maps it into the canonical resume schema.
+- Imports recover on dashboard refresh and redirect to the existing editor when complete.
+- ClamAV, OCR, authentication, and a production source-file retention policy remain deferred.

@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  aiResumeCandidateSchema,
   createEmptyResumeContent,
   resumeContentSchema,
   resumeSectionKeys,
   updateResumeInputSchema,
+  resumeImportJobPayloadSchema,
+  resumeImportSchema,
+  RESUME_IMPORT_JOB_NAME,
+  RESUME_IMPORT_QUEUE_NAME,
 } from './index.js';
 
 describe('resume schema', () => {
@@ -43,5 +48,47 @@ describe('resume schema', () => {
     const content = createEmptyResumeContent();
     content.sectionOrder = content.sectionOrder.map(() => 'summary');
     expect(resumeContentSchema.safeParse(content).success).toBe(false);
+  });
+});
+
+describe('resume import contracts', () => {
+  it('accepts a strict public import and job payload', () => {
+    const value = {
+      id: crypto.randomUUID(),
+      originalFilename: 'resume.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 42,
+      status: 'QUEUED',
+      errorCode: null,
+      errorMessage: null,
+      resumeId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    expect(resumeImportSchema.parse(value)).toEqual(value);
+    expect(
+      resumeImportJobPayloadSchema.safeParse({ importId: value.id, text: 'private' }).success,
+    ).toBe(false);
+  });
+
+  it('exports canonical resume-import queue identifiers', () => {
+    expect(RESUME_IMPORT_QUEUE_NAME).toBe('resume-import');
+    expect(RESUME_IMPORT_JOB_NAME).toBe('process-resume-import');
+  });
+
+  it('keeps AI candidates semantic and rejects worker-owned fields', () => {
+    const candidate = {
+      personalInfo: { fullName: '', email: '', phone: '', location: '' },
+      summary: '',
+      experience: [],
+      education: [],
+      skills: [],
+      languages: [],
+      links: [],
+    };
+    expect(aiResumeCandidateSchema.parse(candidate)).toEqual(candidate);
+    expect(
+      aiResumeCandidateSchema.safeParse({ ...candidate, metadata: { version: 1 } }).success,
+    ).toBe(false);
   });
 });

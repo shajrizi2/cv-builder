@@ -203,6 +203,29 @@ languages, and links, plus ordering and visibility. Its A4-oriented preview upda
 Title and content save together after a 700 ms debounce, with unsaved, saving, saved, and failed
 states. Failed saves retain local edits and can be retried.
 
+### Existing CV import
+
+The dashboard accepts text-based PDF and modern DOCX files up to 10 MB. Uploads are private in
+MinIO, queued through Valkey, extracted by the standard worker image, mapped with the configured
+OpenAI model, validated against the canonical resume schema, and opened in the existing editor.
+Scanned/image-only PDFs, OCR, legacy DOC, images, and antivirus scanning are not supported.
+
+Imports require `MINIO_*`, Valkey, `DATABASE_URL`, `OPENAI_API_KEY`, and an explicit
+`OPENAI_MODEL` for the worker. Automated tests use fakes and never call OpenAI. The existing
+Neon-backed web/API-only startup remains valid for ordinary resume CRUD; imports return a safe
+unavailable response until storage and queue configuration are supplied and require the worker to
+complete. Apply committed migrations before enabling imports.
+
+Uploaded sources remain private and may be retained after successful import. A production
+retention and permanent-deletion policy is unresolved and must be defined before production use.
+If queue submission fails, the import is retained as `FAILED` for visibility and deletion of the
+private source object is attempted as best-effort compensation.
+The API routes are `POST /api/resume-imports`, `GET /api/resume-imports`, and
+`GET /api/resume-imports/:id`.
+
+For a manual AI smoke test, set a real `OPENAI_API_KEY` and `OPENAI_MODEL`, start the complete
+stack, and upload synthetic PDF and DOCX fixtures containing no real personal data.
+
 ## API application
 
 The NestJS API uses Fastify and is available in `apps/api`.
@@ -555,5 +578,6 @@ PostgreSQL off public networks, back up persistent data, and run `db:migrate:dep
 deployment step rather than as application startup behavior.
 
 Known MVP limitations: there is one preview template; dates are free-form; autosave does not offer
-multi-client conflict detection; authentication, uploads, AI, history, and PDF generation are out
-of scope.
+multi-client conflict detection; authentication, ownership, OCR, antivirus scanning, PDF export,
+multiple templates, and version history are out of scope. PDF/DOCX upload and AI-assisted import
+are provided by CVB-021.

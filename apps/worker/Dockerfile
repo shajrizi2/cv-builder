@@ -19,6 +19,8 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/worker/package.json ./apps/worker/package.json
 COPY packages/eslint-config/package.json ./packages/eslint-config/package.json
+COPY packages/database/package.json ./packages/database/package.json
+COPY packages/resume-schema/package.json ./packages/resume-schema/package.json
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --workspace=@cv-builder/worker --include-workspace-root
@@ -41,8 +43,12 @@ FROM dependencies AS builder
 
 COPY tsconfig.base.json ./
 COPY apps/worker ./apps/worker
+COPY packages/database ./packages/database
+COPY packages/resume-schema ./packages/resume-schema
 
-RUN npm run build --workspace=@cv-builder/worker \
+RUN npm run build --workspace=@cv-builder/resume-schema \
+    && npm run build --workspace=@cv-builder/database \
+    && npm run build --workspace=@cv-builder/worker \
     && find apps/worker/dist -type f ! -name '*.js' -delete
 
 FROM toolchain AS production-dependencies
@@ -54,10 +60,12 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/worker/package.json ./apps/worker/package.json
 COPY packages/eslint-config/package.json ./packages/eslint-config/package.json
+COPY packages/database/package.json ./packages/database/package.json
+COPY packages/resume-schema/package.json ./packages/resume-schema/package.json
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev --workspace=@cv-builder/worker --include-workspace-root \
-    && node -e "const fs = require('node:fs'); const root = require('./package.json'); const worker = require('./apps/worker/package.json'); delete root.workspaces; delete root.devDependencies; root.dependencies = worker.dependencies; fs.writeFileSync('package.json', JSON.stringify(root));" \
+    && node -e "const fs = require('node:fs'); const root = require('./package.json'); const worker = require('./apps/worker/package.json'); const database = require('./packages/database/package.json'); const resume = require('./packages/resume-schema/package.json'); delete root.workspaces; delete root.devDependencies; root.dependencies = { ...worker.dependencies, ...database.dependencies, ...resume.dependencies }; delete root.dependencies['@cv-builder/database']; delete root.dependencies['@cv-builder/resume-schema']; fs.writeFileSync('package.json', JSON.stringify(root));" \
     && npm install --package-lock-only --ignore-scripts --workspaces=false \
     && rm -rf node_modules \
     && npm ci --omit=dev --workspaces=false \
@@ -74,7 +82,18 @@ RUN groupadd --system --gid 1001 nodejs \
 
 COPY --from=production-dependencies --chown=worker:nodejs /app/node_modules ./node_modules
 COPY --from=production-dependencies --chown=worker:nodejs /app/apps/worker/package.json ./apps/worker/package.json
+COPY --from=builder --chown=worker:nodejs /app/packages/database/package.json ./packages/database/package.json
+COPY --from=builder --chown=worker:nodejs /app/packages/database/dist ./packages/database/dist
+COPY --from=builder --chown=worker:nodejs /app/packages/resume-schema/package.json ./packages/resume-schema/package.json
+COPY --from=builder --chown=worker:nodejs /app/packages/resume-schema/dist ./packages/resume-schema/dist
 COPY --from=builder --chown=worker:nodejs /app/apps/worker/dist ./apps/worker/dist
+
+RUN mkdir -p /app/node_modules/@cv-builder \
+    && ln -s ../../packages/database /app/node_modules/@cv-builder/database \
+    && ln -s ../../packages/resume-schema /app/node_modules/@cv-builder/resume-schema \
+    && chown -h worker:nodejs \
+        /app/node_modules/@cv-builder/database \
+        /app/node_modules/@cv-builder/resume-schema
 
 WORKDIR /app/apps/worker
 

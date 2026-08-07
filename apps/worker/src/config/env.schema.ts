@@ -33,6 +33,16 @@ const environmentSchema = z.object({
   WORKER_CONCURRENCY: optionalInteger(1, 1, 1_000),
   WORKER_NAME: z.string().trim().min(1).default('cv-builder-worker'),
   WORKER_SHUTDOWN_TIMEOUT_MS: optionalInteger(30_000, 1, 2_147_483_647),
+  DATABASE_URL: optionalCredential,
+  MINIO_ENDPOINT: optionalCredential,
+  MINIO_PORT: optionalInteger(9000, 1, 65_535),
+  MINIO_USE_SSL: explicitBoolean,
+  MINIO_ACCESS_KEY: optionalCredential,
+  MINIO_SECRET_KEY: optionalCredential,
+  MINIO_BUCKET: z.string().trim().min(1).default('cv-imports'),
+  OPENAI_API_KEY: optionalCredential,
+  OPENAI_MODEL: optionalCredential,
+  OPENAI_TIMEOUT_MS: optionalInteger(30_000, 1, 600_000),
 });
 
 export type NodeEnvironment = z.infer<typeof environmentSchema>['NODE_ENV'];
@@ -50,9 +60,47 @@ export interface WorkerEnvironment {
   readonly concurrency: number;
   readonly workerName: string;
   readonly shutdownTimeoutMs: number;
+  readonly databaseUrl?: string;
+  readonly storage?: {
+    readonly endPoint: string;
+    readonly port: number;
+    readonly useSSL: boolean;
+    readonly accessKey: string;
+    readonly secretKey: string;
+    readonly bucket: string;
+  };
+  readonly openai?: { readonly apiKey: string; readonly model: string; readonly timeoutMs: number };
 }
 
 export function validateEnvironment(config: Record<string, unknown>): WorkerEnvironment {
+  const configured = (key: string): boolean => {
+    const value = config[key];
+    return value !== undefined && !(typeof value === 'string' && value.trim() === '');
+  };
+  const minioKeys = [
+    'MINIO_ENDPOINT',
+    'MINIO_PORT',
+    'MINIO_USE_SSL',
+    'MINIO_ACCESS_KEY',
+    'MINIO_SECRET_KEY',
+    'MINIO_BUCKET',
+  ] as const;
+  const hasAnyMinio = minioKeys.some(configured);
+  const hasRequiredMinio = ['MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY'].every(
+    configured,
+  );
+  if (hasAnyMinio && !hasRequiredMinio) {
+    throw new Error(
+      'Invalid worker environment configuration: MinIO configuration must be complete or absent',
+    );
+  }
+  const hasOpenAiKey = configured('OPENAI_API_KEY');
+  const hasOpenAiModel = configured('OPENAI_MODEL');
+  if (hasOpenAiKey !== hasOpenAiModel) {
+    throw new Error(
+      'Invalid worker environment configuration: OPENAI_API_KEY and OPENAI_MODEL must be configured together',
+    );
+  }
   const result = environmentSchema.safeParse(config);
 
   if (!result.success) {
@@ -64,6 +112,25 @@ export function validateEnvironment(config: Record<string, unknown>): WorkerEnvi
 
   const values = result.data;
 
+  const storage =
+    values.MINIO_ENDPOINT && values.MINIO_ACCESS_KEY && values.MINIO_SECRET_KEY
+      ? Object.freeze({
+          endPoint: values.MINIO_ENDPOINT,
+          port: values.MINIO_PORT,
+          useSSL: values.MINIO_USE_SSL,
+          accessKey: values.MINIO_ACCESS_KEY,
+          secretKey: values.MINIO_SECRET_KEY,
+          bucket: values.MINIO_BUCKET,
+        })
+      : undefined;
+  const openai =
+    values.OPENAI_API_KEY && values.OPENAI_MODEL
+      ? Object.freeze({
+          apiKey: values.OPENAI_API_KEY,
+          model: values.OPENAI_MODEL,
+          timeoutMs: values.OPENAI_TIMEOUT_MS,
+        })
+      : undefined;
   return Object.freeze({
     nodeEnv: values.NODE_ENV,
     redis: Object.freeze({
@@ -77,5 +144,8 @@ export function validateEnvironment(config: Record<string, unknown>): WorkerEnvi
     concurrency: values.WORKER_CONCURRENCY,
     workerName: values.WORKER_NAME,
     shutdownTimeoutMs: values.WORKER_SHUTDOWN_TIMEOUT_MS,
+    ...(values.DATABASE_URL ? { databaseUrl: values.DATABASE_URL } : {}),
+    ...(storage ? { storage } : {}),
+    ...(openai ? { openai } : {}),
   });
 }

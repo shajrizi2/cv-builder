@@ -4,6 +4,7 @@ import type { Resume } from '@cv-builder/resume-schema';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createResume, deleteResume, listResumes, updateResume } from '@/lib/resumes-api';
+import { ResumeImportPanel } from './resume-import';
 
 export function ResumeDashboard() {
   const [resumes, setResumes] = useState<Resume[]>([]);
@@ -78,6 +79,7 @@ export function ResumeDashboard() {
         </div>
         <button onClick={() => void create()}>Create resume</button>
       </header>
+      <ResumeImportPanel />
       {error && (
         <p className="error-banner" role="alert">
           {error}
