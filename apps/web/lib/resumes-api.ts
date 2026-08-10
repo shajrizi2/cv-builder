@@ -1,10 +1,12 @@
 import {
   resumeImportSchema,
+  resumeExportSchema,
   resumeSchema,
   type CreateResumeInput,
   type Resume,
   type UpdateResumeInput,
   type ResumeImport,
+  type ResumeExport,
 } from '@cv-builder/resume-schema';
 
 import { publicEnv } from './env';
@@ -54,4 +56,19 @@ export async function updateResume(id: string, input: UpdateResumeInput): Promis
 }
 export async function deleteResume(id: string): Promise<void> {
   await request(`/resumes/${id}`, { method: 'DELETE' });
+}
+export async function createResumeExport(resumeId: string): Promise<ResumeExport> {
+  return resumeExportSchema.parse(
+    await request(`/resumes/${resumeId}/exports`, { method: 'POST' }),
+  );
+}
+export async function getResumeExport(id: string): Promise<ResumeExport> {
+  return resumeExportSchema.parse(await request(`/resume-exports/${id}`));
+}
+export async function getLatestResumeExport(resumeId: string): Promise<ResumeExport | null> {
+  const value = await request(`/resumes/${resumeId}/exports/latest`);
+  return value === null ? null : resumeExportSchema.parse(value);
+}
+export function resumeExportDownloadUrl(id: string): string {
+  return `${publicEnv.NEXT_PUBLIC_API_URL}/resume-exports/${id}/download`;
 }

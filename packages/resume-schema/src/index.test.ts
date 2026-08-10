@@ -10,6 +10,13 @@ import {
   resumeImportSchema,
   RESUME_IMPORT_JOB_NAME,
   RESUME_IMPORT_QUEUE_NAME,
+  DEFAULT_RESUME_TEMPLATE,
+  RESUME_EXPORT_JOB_NAME,
+  RESUME_EXPORT_QUEUE_NAME,
+  resumeExportJobPayloadSchema,
+  resumeExportSchema,
+  resumeTemplateIdSchema,
+  resumeSchema,
 } from './index.js';
 
 describe('resume schema', () => {
@@ -48,6 +55,43 @@ describe('resume schema', () => {
     const content = createEmptyResumeContent();
     content.sectionOrder = content.sectionOrder.map(() => 'summary');
     expect(resumeContentSchema.safeParse(content).success).toBe(false);
+  });
+});
+
+describe('resume export contracts', () => {
+  it('defines exactly two templates with classic as the default', () => {
+    expect(DEFAULT_RESUME_TEMPLATE).toBe('classic');
+    expect(resumeTemplateIdSchema.options).toEqual(['classic', 'modern']);
+    expect(resumeTemplateIdSchema.safeParse('custom').success).toBe(false);
+    expect(
+      resumeSchema.parse({
+        id: crypto.randomUUID(),
+        title: 'Existing resume',
+        content: createEmptyResumeContent(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }).template,
+    ).toBe('classic');
+  });
+
+  it('validates strict public exports and canonical jobs', () => {
+    const id = crypto.randomUUID();
+    const value = {
+      id,
+      resumeId: crypto.randomUUID(),
+      template: 'modern',
+      status: 'COMPLETED',
+      errorCode: null,
+      errorMessage: null,
+      fileSize: 123,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    expect(resumeExportSchema.parse(value)).toEqual(value);
+    expect(resumeExportSchema.safeParse({ ...value, objectKey: 'private' }).success).toBe(false);
+    expect(resumeExportJobPayloadSchema.parse({ exportId: id })).toEqual({ exportId: id });
+    expect(RESUME_EXPORT_QUEUE_NAME).toBe('resume-export');
+    expect(RESUME_EXPORT_JOB_NAME).toBe('generate-resume-pdf');
   });
 });
 

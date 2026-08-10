@@ -61,7 +61,7 @@ services:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
-      target: production
+      target: document-processing
     depends_on:
       valkey:
         condition: service_healthy
@@ -87,7 +87,10 @@ services:
       MINIO_BUCKET: '${MINIO_BUCKET:-cv-imports}'
       OPENAI_API_KEY: '${OPENAI_API_KEY:-}'
       OPENAI_MODEL: '${OPENAI_MODEL:-}'
+      CHROMIUM_EXECUTABLE_PATH: /usr/bin/chromium
     init: true
+    security_opt:
+      - seccomp=./docker/chromium-seccomp.json
     networks:
       - app-network
     restart: on-failure:3

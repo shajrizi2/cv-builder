@@ -14,7 +14,7 @@ packages/
   eslint-config/ Shared ESLint flat configuration
   resume-schema/ Canonical runtime-validated résumé domain
   shared/        Shared utilities package placeholder
-  templates/     Shared CV templates package placeholder
+  templates/     Shared deterministic resume HTML/CSS renderer
   validation/    Shared validation package placeholder
 infrastructure/
   docker/        Docker configuration placeholder
@@ -419,11 +419,11 @@ docker build \
   .
 ```
 
-This target keeps the same non-root user, health check, and worker entrypoint. It does not include
-Playwright, Puppeteer, OCR, or document-processing jobs. Chromium keeps its sandbox enabled. The
-container runtime security profile must permit Chromium to create its sandbox namespaces; prefer a
-narrow seccomp profile granting the required namespace operations rather than disabling Chromium's
-sandbox.
+This target keeps the same non-root user, health check, and worker entrypoint and does not include
+OCR. Chromium keeps its sandbox enabled. Docker's default seccomp profile blocks the sandbox's
+`clone` and `unshare` namespace operations on the tested Docker 29 runtime, so the repository
+includes `docker/chromium-seccomp.json`. It is derived from Moby's `seccomp/v0.2.1` default profile
+and adds only those two syscalls; all other default filtering remains active.
 
 ## Docker Compose application stack
 
@@ -577,7 +577,20 @@ Production deployments must supply secrets through their deployment secret mecha
 PostgreSQL off public networks, back up persistent data, and run `db:migrate:deploy` as a controlled
 deployment step rather than as application startup behavior.
 
-Known MVP limitations: there is one preview template; dates are free-form; autosave does not offer
-multi-client conflict detection; authentication, ownership, OCR, antivirus scanning, PDF export,
-multiple templates, and version history are out of scope. PDF/DOCX upload and AI-assisted import
-are provided by CVB-021.
+CVB-022 provides the `classic` (default) and `modern` templates plus asynchronous private PDF
+export. Template selection is persisted on each resume. Export creation uses
+`POST /api/resumes/:resumeId/exports`, status uses `GET /api/resume-exports/:exportId`, and completed
+files download through `GET /api/resume-exports/:exportId/download`. The worker consumes the shared
+`resume-export` queue in the Chromium-capable `document-processing` image, renders validated
+persisted snapshots without remote resources, and stores the resulting PDF privately in MinIO.
+The standard `production` worker target remains browser-free.
+Compose applies the repository-controlled narrow seccomp profile only to the document worker.
+Chromium itself remains sandboxed: the renderer explicitly removes Playwright's `--no-sandbox` and
+`--disable-setuid-sandbox` defaults. Deployments must preserve namespace support and must not
+replace this profile with `seccomp=unconfined`, broad capabilities, privileged mode, or Chromium
+sandbox-disabling flags.
+
+Known MVP limitations: dates are free-form; autosave does not offer multi-client conflict
+detection; authentication, ownership, OCR, antivirus scanning, version history, and templates
+beyond `classic` and `modern` remain out of scope. Automated retention/deletion for imported
+sources and generated PDFs is unresolved and must be defined before production use.

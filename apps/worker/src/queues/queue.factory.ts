@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
-import { RESUME_IMPORT_QUEUE_NAME } from '@cv-builder/resume-schema';
+import { RESUME_EXPORT_QUEUE_NAME, RESUME_IMPORT_QUEUE_NAME } from '@cv-builder/resume-schema';
 
 import type { WorkerConfiguration } from '../config/configuration.js';
 import type { Logger } from '../logging/logger.js';
@@ -15,6 +15,8 @@ import { Client } from 'minio';
 import { OpenAiResumeMapper } from '../ai/openai-resume-mapper.js';
 import { createResumeImportProcessor } from '../processors/resume-import.processor.js';
 import { UnavailableResumeMapper } from '../ai/unavailable-resume-mapper.js';
+import { ChromiumPdfRenderer } from '../exports/pdf-renderer.js';
+import { createResumeExportProcessor } from '../processors/resume-export.processor.js';
 
 export interface WorkerResources {
   readonly queue: Queue<TestJobData, TestJobResult>;
@@ -23,6 +25,8 @@ export interface WorkerResources {
   readonly workerConnection: Redis;
   readonly importWorker?: Worker;
   readonly importWorkerConnection?: Redis;
+  readonly exportWorker?: Worker;
+  readonly exportWorkerConnection?: Redis;
   readonly disconnectDatabase?: () => Promise<void>;
 }
 
@@ -103,6 +107,34 @@ export function createWorkerResources(
       name: config.workerName,
     },
   );
+  const exportWorkerConnection = config.chromiumExecutablePath
+    ? new Redis({ ...config.redisConnection, maxRetriesPerRequest: null })
+    : undefined;
+  const exportWorker =
+    config.chromiumExecutablePath && exportWorkerConnection
+      ? new Worker(
+          RESUME_EXPORT_QUEUE_NAME,
+          createResumeExportProcessor(
+            database,
+            {
+              async put(key: string, bytes: Buffer): Promise<void> {
+                await minio.putObject(config.storage!.bucket, key, bytes, bytes.length, {
+                  'Content-Type': 'application/pdf',
+                });
+              },
+              async remove(key: string): Promise<void> {
+                await minio.removeObject(config.storage!.bucket, key);
+              },
+            },
+            new ChromiumPdfRenderer(config.chromiumExecutablePath),
+          ),
+          {
+            connection: exportWorkerConnection,
+            concurrency: config.concurrency,
+            name: config.workerName,
+          },
+        )
+      : undefined;
   return {
     queue,
     queueConnection,
@@ -110,6 +142,8 @@ export function createWorkerResources(
     workerConnection,
     importWorker,
     importWorkerConnection,
+    ...(exportWorker ? { exportWorker } : {}),
+    ...(exportWorkerConnection ? { exportWorkerConnection } : {}),
     disconnectDatabase: () => database.$disconnect(),
   };
 }

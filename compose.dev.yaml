@@ -38,6 +38,7 @@ services:
       - ./apps/web/postcss.config.mjs:/app/apps/web/postcss.config.mjs
       - ./apps/web/tsconfig.json:/app/apps/web/tsconfig.json
       - ./packages/resume-schema:/app/packages/resume-schema
+      - ./packages/templates:/app/packages/templates
 
   api:
     build:
@@ -87,6 +88,7 @@ services:
       - --workspace=@cv-builder/worker
     environment:
       NODE_ENV: development
+      CHROMIUM_EXECUTABLE_PATH: ''
     healthcheck:
       test:
         - CMD
@@ -104,6 +106,7 @@ services:
       - ./apps/worker/tests:/app/apps/worker/tests
       - ./apps/worker/tsconfig.build.json:/app/apps/worker/tsconfig.build.json
       - ./apps/worker/tsconfig.json:/app/apps/worker/tsconfig.json
+      - ./packages/templates:/app/packages/templates
 
   postgres:
     ports:

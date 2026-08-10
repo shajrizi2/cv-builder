@@ -3,13 +3,20 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResumeEditor } from '@/components/resume-editor';
 
-const api = vi.hoisted(() => ({ updateResume: vi.fn() }));
+const api = vi.hoisted(() => ({
+  updateResume: vi.fn(),
+  createResumeExport: vi.fn(),
+  getLatestResumeExport: vi.fn(),
+  getResumeExport: vi.fn(),
+  resumeExportDownloadUrl: vi.fn((id: string) => `/exports/${id}`),
+}));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('@/lib/resumes-api', () => api);
 vi.mock('next/navigation', () => ({ useRouter: () => navigation }));
 const resume = {
   id: '550e8400-e29b-41d4-a716-446655440000',
   title: 'My CV',
+  template: 'classic' as const,
   content: createEmptyResumeContent(),
   createdAt: '2026-08-03T12:00:00.000Z',
   updatedAt: '2026-08-03T12:00:00.000Z',
@@ -19,9 +26,22 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
   api.updateResume.mockResolvedValue(resume);
+  api.getLatestResumeExport.mockResolvedValue(null);
 });
 afterEach(() => vi.useRealTimers());
 describe('resume editor and autosave', () => {
+  it('switches templates immediately and persists through autosave', async () => {
+    render(<ResumeEditor initialResume={resume} />);
+    fireEvent.change(screen.getByLabelText('Resume template'), { target: { value: 'modern' } });
+    expect(screen.getByLabelText('Live resume preview').innerHTML).toContain('template-modern');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+    expect(api.updateResume).toHaveBeenCalledWith(
+      resume.id,
+      expect.objectContaining({ template: 'modern' }),
+    );
+  });
   it('updates preview immediately and saves once after the debounce', async () => {
     render(<ResumeEditor initialResume={resume} />);
     const name = screen.getByLabelText('Full name');
@@ -158,5 +178,79 @@ describe('resume editor and autosave', () => {
       resolveSecond(resume);
     });
     expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  });
+
+  it('persists the exact newest render before exporting even while status was saved', async () => {
+    let resolveSave!: (value: typeof resume) => void;
+    api.updateResume.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    api.createResumeExport.mockResolvedValue({ status: 'QUEUED' });
+    render(<ResumeEditor initialResume={resume} />);
+
+    fireEvent.change(screen.getByLabelText('Resume title'), { target: { value: 'Newest title' } });
+    fireEvent.change(screen.getByLabelText('Summary'), { target: { value: 'Newest content' } });
+    fireEvent.change(screen.getByLabelText('Resume template'), { target: { value: 'modern' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }));
+
+    expect(api.updateResume).toHaveBeenCalledTimes(1);
+    expect(api.updateResume).toHaveBeenCalledWith(
+      resume.id,
+      expect.objectContaining({
+        title: 'Newest title',
+        template: 'modern',
+        content: expect.objectContaining({ summary: 'Newest content' }),
+      }),
+    );
+    expect(api.createResumeExport).not.toHaveBeenCalled();
+    await act(async () => resolveSave(resume));
+    expect(api.createResumeExport).toHaveBeenCalledWith(resume.id);
+  });
+
+  it('queues an explicit export snapshot behind an older in-flight save', async () => {
+    let resolveOlder!: (value: typeof resume) => void;
+    let resolveNewest!: (value: typeof resume) => void;
+    api.updateResume
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOlder = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveNewest = resolve;
+          }),
+      );
+    api.createResumeExport.mockResolvedValue({ status: 'QUEUED' });
+    render(<ResumeEditor initialResume={resume} />);
+    fireEvent.change(screen.getByLabelText('Summary'), { target: { value: 'Older edit' } });
+    await act(async () => vi.advanceTimersByTimeAsync(700));
+
+    fireEvent.change(screen.getByLabelText('Summary'), { target: { value: 'Export this edit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }));
+    expect(api.updateResume).toHaveBeenCalledTimes(1);
+    await act(async () => resolveOlder(resume));
+    expect(api.updateResume).toHaveBeenCalledTimes(2);
+    expect(api.updateResume.mock.calls[1]![1].content.summary).toBe('Export this edit');
+    expect(api.createResumeExport).not.toHaveBeenCalled();
+    await act(async () => resolveNewest(resume));
+    expect(api.createResumeExport).toHaveBeenCalledWith(resume.id);
+  });
+
+  it('blocks export when the exact latest snapshot fails to save', async () => {
+    api.updateResume.mockRejectedValueOnce(new Error('offline'));
+    render(<ResumeEditor initialResume={resume} />);
+    fireEvent.change(screen.getByLabelText('Resume title'), {
+      target: { value: 'Unsaved export' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }));
+    await act(async () => {});
+    expect(api.createResumeExport).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Save the latest changes');
   });
 });

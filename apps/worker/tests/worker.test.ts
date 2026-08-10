@@ -56,9 +56,15 @@ function createHarness(): {
     pause: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
   };
+  exportWorker: {
+    waitUntilReady: ReturnType<typeof vi.fn>;
+    pause: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+  };
   queueConnection: { quit: ReturnType<typeof vi.fn> };
   workerConnection: { quit: ReturnType<typeof vi.fn> };
   importWorkerConnection: { quit: ReturnType<typeof vi.fn> };
+  exportWorkerConnection: { quit: ReturnType<typeof vi.fn> };
   disconnectDatabase: ReturnType<typeof vi.fn>;
 } {
   const queue = {
@@ -75,17 +81,25 @@ function createHarness(): {
     pause: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
+  const exportWorker = {
+    waitUntilReady: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  };
   const queueConnection = { quit: vi.fn().mockResolvedValue('OK') };
   const workerConnection = { quit: vi.fn().mockResolvedValue('OK') };
   const importWorkerConnection = { quit: vi.fn().mockResolvedValue('OK') };
+  const exportWorkerConnection = { quit: vi.fn().mockResolvedValue('OK') };
   const disconnectDatabase = vi.fn().mockResolvedValue(undefined);
   const resources = {
     queue: queue as unknown as Queue<TestJobData, TestJobResult>,
     worker: worker as unknown as Worker<TestJobData, TestJobResult>,
     importWorker: importWorker as unknown as Worker,
+    exportWorker: exportWorker as unknown as Worker,
     queueConnection: queueConnection as unknown as Redis,
     workerConnection: workerConnection as unknown as Redis,
     importWorkerConnection: importWorkerConnection as unknown as Redis,
+    exportWorkerConnection: exportWorkerConnection as unknown as Redis,
     disconnectDatabase,
   } satisfies WorkerResources;
   const logger: Logger = {
@@ -100,22 +114,26 @@ function createHarness(): {
     queue,
     worker,
     importWorker,
+    exportWorker,
     queueConnection,
     workerConnection,
     importWorkerConnection,
+    exportWorkerConnection,
     disconnectDatabase,
   };
 }
 
 describe('WorkerApplication', () => {
   it('reports ready only after every created BullMQ resource connects', async () => {
-    const { application, queue, worker, importWorker } = createHarness();
+    const { application, queue, worker, importWorker, exportWorker } = createHarness();
     const queueReady = deferred<void>();
     const workerReady = deferred<void>();
     const importWorkerReady = deferred<void>();
+    const exportWorkerReady = deferred<void>();
     queue.waitUntilReady.mockReturnValue(queueReady.promise);
     worker.waitUntilReady.mockReturnValue(workerReady.promise);
     importWorker.waitUntilReady.mockReturnValue(importWorkerReady.promise);
+    exportWorker.waitUntilReady.mockReturnValue(exportWorkerReady.promise);
 
     const starting = application.start();
     expect(application.health.getSnapshot().status).toBe('starting');
@@ -126,6 +144,9 @@ describe('WorkerApplication', () => {
     await Promise.resolve();
     expect(application.health.getSnapshot().status).toBe('starting');
     importWorkerReady.resolve(undefined);
+    await Promise.resolve();
+    expect(application.health.getSnapshot().status).toBe('starting');
+    exportWorkerReady.resolve(undefined);
     await starting;
 
     expect(application.health.getSnapshot().status).toBe('ready');
@@ -137,9 +158,11 @@ describe('WorkerApplication', () => {
       queue,
       worker,
       importWorker,
+      exportWorker,
       queueConnection,
       workerConnection,
       importWorkerConnection,
+      exportWorkerConnection,
       disconnectDatabase,
     } = createHarness();
     await application.start();
@@ -153,10 +176,13 @@ describe('WorkerApplication', () => {
     expect(worker.close).toHaveBeenCalledWith();
     expect(importWorker.pause).toHaveBeenCalledWith(true);
     expect(importWorker.close).toHaveBeenCalledWith();
+    expect(exportWorker.pause).toHaveBeenCalledWith(true);
+    expect(exportWorker.close).toHaveBeenCalledWith();
     expect(queue.close).toHaveBeenCalledOnce();
     expect(queueConnection.quit).toHaveBeenCalledOnce();
     expect(workerConnection.quit).toHaveBeenCalledOnce();
     expect(importWorkerConnection.quit).toHaveBeenCalledOnce();
+    expect(exportWorkerConnection.quit).toHaveBeenCalledOnce();
     expect(disconnectDatabase).toHaveBeenCalledOnce();
     expect(application.health.getSnapshot().status).toBe('stopped');
   });
@@ -202,6 +228,21 @@ describe('WorkerApplication', () => {
     expect(worker.close).toHaveBeenCalledWith();
     expect(importWorker.close).toHaveBeenNthCalledWith(1);
     expect(importWorker.close).toHaveBeenNthCalledWith(2, true);
+    vi.useRealTimers();
+  });
+
+  it('force-closes a PDF export worker that exceeds the graceful timeout', async () => {
+    vi.useFakeTimers();
+    const { application, exportWorker } = createHarness();
+    exportWorker.close
+      .mockReturnValueOnce(new Promise<void>(() => undefined))
+      .mockResolvedValueOnce(undefined);
+    await application.start();
+    const shutdown = application.shutdown();
+    await vi.advanceTimersByTimeAsync(config.shutdownTimeoutMs);
+    await shutdown;
+    expect(exportWorker.close).toHaveBeenNthCalledWith(1);
+    expect(exportWorker.close).toHaveBeenNthCalledWith(2, true);
     vi.useRealTimers();
   });
 
