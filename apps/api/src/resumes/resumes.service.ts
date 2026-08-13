@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { PrismaClient } from '@cv-builder/database';
 import {
+  DEFAULT_RESUME_TEMPLATE,
   createEmptyResumeContent,
   resumeContentSchema,
   resumeSchema,
@@ -24,7 +25,11 @@ export class ResumesService {
   async create(input: CreateResumeInput): Promise<Resume> {
     return this.toResume(
       await this.database.resume.create({
-        data: { title: input.title, content: createEmptyResumeContent() },
+        data: {
+          title: input.title,
+          content: createEmptyResumeContent(),
+          template: input.template ?? DEFAULT_RESUME_TEMPLATE,
+        },
       }),
     );
   }
@@ -48,6 +53,7 @@ export class ResumesService {
       data: {
         ...(input.title === undefined ? {} : { title: input.title }),
         ...(input.content === undefined ? {} : { content: input.content }),
+        ...(input.template === undefined ? {} : { template: input.template }),
       },
     });
     return this.toResume(record);
@@ -63,6 +69,7 @@ export class ResumesService {
     return resumeSchema.parse({
       id: record.id,
       title: record.title,
+      template: record.template ?? DEFAULT_RESUME_TEMPLATE,
       content,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),

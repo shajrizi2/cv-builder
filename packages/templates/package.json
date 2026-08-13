@@ -1,0 +1,29 @@
+{
+  "name": "@cv-builder/templates",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cv-builder/resume-schema": "0.0.0"
+  },
+  "devDependencies": {
+    "@cv-builder/eslint-config": "0.0.0",
+    "@types/node": "22.20.1",
+    "typescript-eslint": "8.65.0",
+    "vitest": "4.1.10"
+  }
+}

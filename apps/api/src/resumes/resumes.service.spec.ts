@@ -40,7 +40,7 @@ describe('ResumesService', () => {
       content: createEmptyResumeContent(),
     });
     expect(resume.create).toHaveBeenCalledWith({
-      data: { title: 'My CV', content: createEmptyResumeContent() },
+      data: { title: 'My CV', content: createEmptyResumeContent(), template: 'classic' },
     });
   });
   it('lists newest resumes and validates stored JSON', async () => {

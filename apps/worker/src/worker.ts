@@ -1,5 +1,5 @@
 import type { WorkerConfiguration } from './config/configuration.js';
-import { RESUME_IMPORT_QUEUE_NAME } from '@cv-builder/resume-schema';
+import { RESUME_EXPORT_QUEUE_NAME, RESUME_IMPORT_QUEUE_NAME } from '@cv-builder/resume-schema';
 import { WorkerHealth } from './health/worker-health.js';
 import type { Logger } from './logging/logger.js';
 import { createWorkerResources, type WorkerResources } from './queues/queue.factory.js';
@@ -32,6 +32,7 @@ export class WorkerApplication {
         resources.queue.waitUntilReady(),
         resources.worker.waitUntilReady(),
         ...(resources.importWorker ? [resources.importWorker.waitUntilReady()] : []),
+        ...(resources.exportWorker ? [resources.exportWorker.waitUntilReady()] : []),
       ]);
       this.health.markReady();
       this.logger.info('worker.ready', { queueName: SYSTEM_TEST_QUEUE_NAME });
@@ -88,24 +89,32 @@ export class WorkerApplication {
       return;
     }
 
-    const workers = [resources.worker, ...(resources.importWorker ? [resources.importWorker] : [])];
+    const workers = [
+      { worker: resources.worker, queueName: SYSTEM_TEST_QUEUE_NAME },
+      ...(resources.importWorker
+        ? [{ worker: resources.importWorker, queueName: RESUME_IMPORT_QUEUE_NAME }]
+        : []),
+      ...(resources.exportWorker
+        ? [{ worker: resources.exportWorker, queueName: RESUME_EXPORT_QUEUE_NAME }]
+        : []),
+    ];
     let workerFailure: unknown;
 
     if (forceImmediately) {
-      const forced = await Promise.allSettled(workers.map((worker) => worker.close(true)));
+      const forced = await Promise.allSettled(workers.map(({ worker }) => worker.close(true)));
       workerFailure = forced.find((result) => result.status === 'rejected')?.reason;
     } else {
-      const pauses = await Promise.allSettled(workers.map((worker) => worker.pause(true)));
+      const pauses = await Promise.allSettled(workers.map(({ worker }) => worker.pause(true)));
       workerFailure = pauses.find((result) => result.status === 'rejected')?.reason;
 
       if (workerFailure === undefined) {
         const closes = await Promise.all(
-          workers.map(async (worker, index): Promise<unknown> => {
+          workers.map(async ({ worker, queueName }): Promise<unknown> => {
             try {
               const completed = await this.waitForGracefulClose(worker.close());
               if (!completed) {
                 this.logger.error('worker.shutdown-timeout', {
-                  queueName: index === 0 ? SYSTEM_TEST_QUEUE_NAME : RESUME_IMPORT_QUEUE_NAME,
+                  queueName,
                 });
                 await worker.close(true);
               }
@@ -119,7 +128,7 @@ export class WorkerApplication {
       }
 
       if (workerFailure !== undefined) {
-        await Promise.allSettled(workers.map((worker) => worker.close(true)));
+        await Promise.allSettled(workers.map(({ worker }) => worker.close(true)));
       }
     }
 
@@ -128,6 +137,7 @@ export class WorkerApplication {
       resources.queueConnection.quit(),
       resources.workerConnection.quit(),
       ...(resources.importWorkerConnection ? [resources.importWorkerConnection.quit()] : []),
+      ...(resources.exportWorkerConnection ? [resources.exportWorkerConnection.quit()] : []),
       ...(resources.disconnectDatabase ? [resources.disconnectDatabase()] : []),
     ]);
     this.resources = undefined;

@@ -32,6 +32,7 @@ Sprint 2 — MVP Core
 - [x] CVB-018 — Created the PostgreSQL and Prisma database foundation
 - [x] CVB-020 — Built the resume workspace vertical slice
 - [x] CVB-021 — Existing CV upload and AI import
+- [x] CVB-022 — Resume templates and PDF export
 
 ## In Progress
 
@@ -103,8 +104,8 @@ Not started
 - `@cv-builder/resume-schema` is the canonical runtime and type contract.
 - PostgreSQL stores each validated resume document as JSONB in the `Resume` model.
 - NestJS exposes strict CRUD below `/api/resumes`.
-- Next.js provides the dashboard, responsive editor, debounced autosave, and one live A4 preview.
-- Authentication, OCR, PDF export, and multiple templates remain out of scope.
+- Next.js provides the dashboard, responsive editor, serialized autosave, and live template preview.
+- Authentication and OCR remain out of scope.
 
 ## CVB-021 Delivered Architecture
 
@@ -112,3 +113,12 @@ Not started
 - A dedicated BullMQ queue extracts selectable text and maps it into the canonical resume schema.
 - Imports recover on dashboard refresh and redirect to the existing editor when complete.
 - ClamAV, OCR, authentication, and a production source-file retention policy remain deferred.
+
+## CVB-022 Delivered Architecture
+
+- Resumes persist one of the canonical `classic` or `modern` template IDs; existing rows default to `classic`.
+- Web preview and worker PDF generation share the escaped deterministic `@cv-builder/templates` renderer.
+- PDF exports persist immutable title/content/template snapshots and asynchronous lifecycle state.
+- A dedicated BullMQ queue renders A4 PDFs with system Chromium and stores them privately in MinIO.
+- Downloads flow through the API and never expose object keys, bucket details, or storage credentials.
+- Authentication/ownership, antivirus, OCR, version history, and automatic export retention/deletion remain deferred.

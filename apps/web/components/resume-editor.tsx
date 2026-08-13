@@ -5,11 +5,13 @@ import {
   type Resume,
   type ResumeContent,
   type ResumeSectionKey,
+  resumeTemplateIds,
 } from '@cv-builder/resume-schema';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useAutosave } from '@/hooks/use-autosave';
 import { ResumePreview } from './resume-preview';
+import { ResumeExportPanel } from './resume-export';
 
 type ArrayKey = 'experience' | 'education' | 'skills' | 'languages' | 'links';
 const labels: Record<ResumeSectionKey, string> = {
@@ -26,11 +28,13 @@ export function ResumeEditor({ initialResume }: { initialResume: Resume }) {
   const router = useRouter();
   const [title, setTitle] = useState(initialResume.title);
   const [content, setContent] = useState(initialResume.content);
-  const validation = updateResumeInputSchema.safeParse({ title, content });
+  const [template, setTemplate] = useState(initialResume.template);
+  const validation = updateResumeInputSchema.safeParse({ title, content, template });
   const { status, retry, saveLatest, isNavigationSafe } = useAutosave(
     initialResume.id,
     title,
     content,
+    template,
   );
 
   async function returnToDashboard() {
@@ -136,6 +140,23 @@ export function ResumeEditor({ initialResume }: { initialResume: Resume }) {
       )}
       <div className="workspace-columns">
         <div className="editor-panel">
+          <fieldset>
+            <legend>Template</legend>
+            <label>
+              Resume template
+              <select
+                value={template}
+                onChange={(event) => setTemplate(event.target.value as typeof template)}
+              >
+                {resumeTemplateIds.map((id) => (
+                  <option key={id} value={id}>
+                    {id === 'classic' ? 'Classic' : 'Modern'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <ResumeExportPanel resumeId={initialResume.id} saveLatest={saveLatest} />
+          </fieldset>
           <fieldset>
             <legend>Section display</legend>
             {content.sectionOrder.map((key, index) => (
@@ -335,7 +356,7 @@ export function ResumeEditor({ initialResume }: { initialResume: Resume }) {
           />
         </div>
         <aside className="preview-panel">
-          <ResumePreview content={content} />
+          <ResumePreview content={content} template={template} />
         </aside>
       </div>
     </main>

@@ -261,8 +261,21 @@ textarea {
   background: white;
   box-shadow: 0 8px 30px #0f172a33;
   color: #1e293b;
-  padding: 18mm;
-  font-family: Georgia, serif;
+  padding: 0;
+  overflow: hidden;
+}
+.export-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+}
+.export-panel p {
+  margin: 0;
+}
+.export-panel a {
+  font-weight: 700;
 }
 .preview-header {
   border-bottom: 3px solid #155e75;

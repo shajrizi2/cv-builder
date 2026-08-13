@@ -5,6 +5,10 @@ const shortText = z.string().max(300);
 const id = z.string().uuid();
 const resumeTitleSchema = z.string().trim().min(1, { message: 'Title is required' }).max(200);
 
+export const resumeTemplateIds = ['classic', 'modern'] as const;
+export const resumeTemplateIdSchema = z.enum(resumeTemplateIds);
+export const DEFAULT_RESUME_TEMPLATE = 'classic' as const;
+
 export const resumeSectionKeys = [
   'personalInfo',
   'summary',
@@ -79,22 +83,58 @@ export const resumeSchema = z
   .object({
     id: id,
     title: resumeTitleSchema,
+    template: resumeTemplateIdSchema.default(DEFAULT_RESUME_TEMPLATE),
     content: resumeContentSchema,
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
   .strict();
 
-export const createResumeInputSchema = z.object({ title: resumeTitleSchema }).strict();
+export const createResumeInputSchema = z
+  .object({ title: resumeTitleSchema, template: resumeTemplateIdSchema.optional() })
+  .strict();
 export const updateResumeInputSchema = z
   .object({
     title: resumeTitleSchema.optional(),
     content: resumeContentSchema.optional(),
+    template: resumeTemplateIdSchema.optional(),
   })
   .strict()
-  .refine((value) => value.title !== undefined || value.content !== undefined, {
-    message: 'At least one field must be provided',
-  });
+  .refine(
+    (value) =>
+      value.title !== undefined || value.content !== undefined || value.template !== undefined,
+    {
+      message: 'At least one field must be provided',
+    },
+  );
+
+export const resumeExportStatuses = ['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED'] as const;
+export const resumeExportStatusSchema = z.enum(resumeExportStatuses);
+export const resumeExportErrorCodes = [
+  'EXPORT_INFRASTRUCTURE_UNAVAILABLE',
+  'INVALID_RESUME_SNAPSHOT',
+  'INVALID_TEMPLATE',
+  'PDF_RENDER_FAILED',
+  'PDF_STORAGE_FAILED',
+  'EXPORT_PROCESSING_FAILED',
+] as const;
+export const resumeExportErrorCodeSchema = z.enum(resumeExportErrorCodes);
+export const resumeExportJobPayloadSchema = z.object({ exportId: id }).strict();
+export const RESUME_EXPORT_QUEUE_NAME = 'resume-export';
+export const RESUME_EXPORT_JOB_NAME = 'generate-resume-pdf';
+export const resumeExportSchema = z
+  .object({
+    id,
+    resumeId: id,
+    template: resumeTemplateIdSchema,
+    status: resumeExportStatusSchema,
+    errorCode: resumeExportErrorCodeSchema.nullable(),
+    errorMessage: z.string().max(500).nullable(),
+    fileSize: z.number().int().positive().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict();
 
 export const resumeImportStatuses = ['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED'] as const;
 export const resumeImportStatusSchema = z.enum(resumeImportStatuses);
@@ -162,6 +202,7 @@ export const aiResumeCandidateSchema = z
 
 export type ResumeSectionKey = z.infer<typeof resumeSectionKeySchema>;
 export type ResumeContent = z.infer<typeof resumeContentSchema>;
+export type ResumeTemplateId = z.infer<typeof resumeTemplateIdSchema>;
 export type Resume = z.infer<typeof resumeSchema>;
 export type CreateResumeInput = z.infer<typeof createResumeInputSchema>;
 export type UpdateResumeInput = z.infer<typeof updateResumeInputSchema>;
@@ -176,6 +217,10 @@ export type ResumeImportErrorCode = z.infer<typeof resumeImportErrorCodeSchema>;
 export type ResumeImportJobPayload = z.infer<typeof resumeImportJobPayloadSchema>;
 export type ResumeImport = z.infer<typeof resumeImportSchema>;
 export type AiResumeCandidate = z.infer<typeof aiResumeCandidateSchema>;
+export type ResumeExportStatus = z.infer<typeof resumeExportStatusSchema>;
+export type ResumeExportErrorCode = z.infer<typeof resumeExportErrorCodeSchema>;
+export type ResumeExportJobPayload = z.infer<typeof resumeExportJobPayloadSchema>;
+export type ResumeExport = z.infer<typeof resumeExportSchema>;
 
 export function createEmptyResumeContent(): ResumeContent {
   return {

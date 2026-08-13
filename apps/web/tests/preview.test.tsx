@@ -12,7 +12,7 @@ describe('ResumePreview', () => {
     content.languages = [{ id: crypto.randomUUID(), name: 'English', proficiency: 'Fluent' }];
     content.links = [{ id: crypto.randomUUID(), label: 'Portfolio', url: 'https://example.com' }];
     content.sectionVisibility.skills = false;
-    render(<ResumePreview content={content} />);
+    render(<ResumePreview content={content} template="classic" />);
     expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByText('Computing pioneer')).toBeInTheDocument();
     expect(screen.getByText(/English/)).toBeInTheDocument();
@@ -20,7 +20,7 @@ describe('ResumePreview', () => {
     expect(screen.queryByText(/Mathematics/)).not.toBeInTheDocument();
   });
   it('keeps partial content understandable and hides empty optional sections', () => {
-    render(<ResumePreview content={createEmptyResumeContent()} />);
+    render(<ResumePreview content={createEmptyResumeContent()} template="classic" />);
     expect(screen.getByText('Your name')).toBeInTheDocument();
     expect(screen.queryByText('Profile')).not.toBeInTheDocument();
   });

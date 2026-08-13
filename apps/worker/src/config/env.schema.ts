@@ -43,6 +43,7 @@ const environmentSchema = z.object({
   OPENAI_API_KEY: optionalCredential,
   OPENAI_MODEL: optionalCredential,
   OPENAI_TIMEOUT_MS: optionalInteger(30_000, 1, 600_000),
+  CHROMIUM_EXECUTABLE_PATH: optionalCredential,
 });
 
 export type NodeEnvironment = z.infer<typeof environmentSchema>['NODE_ENV'];
@@ -70,6 +71,7 @@ export interface WorkerEnvironment {
     readonly bucket: string;
   };
   readonly openai?: { readonly apiKey: string; readonly model: string; readonly timeoutMs: number };
+  readonly chromiumExecutablePath?: string;
 }
 
 export function validateEnvironment(config: Record<string, unknown>): WorkerEnvironment {
@@ -147,5 +149,8 @@ export function validateEnvironment(config: Record<string, unknown>): WorkerEnvi
     ...(values.DATABASE_URL ? { databaseUrl: values.DATABASE_URL } : {}),
     ...(storage ? { storage } : {}),
     ...(openai ? { openai } : {}),
+    ...(values.CHROMIUM_EXECUTABLE_PATH
+      ? { chromiumExecutablePath: values.CHROMIUM_EXECUTABLE_PATH }
+      : {}),
   });
 }

@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { ResumesModule } from './resumes/resumes.module';
 import { ResumeImportsModule } from './resume-imports/resume-imports.module';
+import { ResumeExportsModule } from './resume-exports/resume-exports.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ResumeImportsModule } from './resume-imports/resume-imports.module';
     HealthModule,
     ResumesModule,
     ResumeImportsModule,
+    ResumeExportsModule,
   ],
 })
 export class AppModule {}

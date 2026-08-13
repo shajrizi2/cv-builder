@@ -3,6 +3,7 @@
 import {
   updateResumeInputSchema,
   type ResumeContent,
+  type ResumeTemplateId,
   type UpdateResumeInput,
 } from '@cv-builder/resume-schema';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,9 +12,16 @@ import { updateResume } from '@/lib/resumes-api';
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'failed';
 type PendingSave = { input: UpdateResumeInput; version: number };
 
-export function useAutosave(id: string, title: string, content: ResumeContent, delay = 700) {
+export function useAutosave(
+  id: string,
+  title: string,
+  content: ResumeContent,
+  template: ResumeTemplateId,
+  delay = 700,
+) {
   const [status, setStatus] = useState<SaveStatus>('saved');
   const version = useRef(0);
+  const persistedVersion = useRef(0);
   const pending = useRef<PendingSave | undefined>(undefined);
   const flushPromise = useRef<Promise<boolean> | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -34,6 +42,7 @@ export function useAutosave(id: string, title: string, content: ResumeContent, d
           setStatus('failed');
           return false;
         }
+        persistedVersion.current = Math.max(persistedVersion.current, item.version);
         setStatus(
           version.current === item.version && pending.current === undefined ? 'saved' : 'unsaved',
         );
@@ -59,7 +68,7 @@ export function useAutosave(id: string, title: string, content: ResumeContent, d
     clearTimeout(timer.current);
     pending.current = undefined;
 
-    const parsed = updateResumeInputSchema.safeParse({ title, content });
+    const parsed = updateResumeInputSchema.safeParse({ title, content, template });
     if (!parsed.success) return;
 
     timer.current = setTimeout(() => {
@@ -67,20 +76,20 @@ export function useAutosave(id: string, title: string, content: ResumeContent, d
       void flush();
     }, delay);
     return () => clearTimeout(timer.current);
-  }, [content, delay, flush, title]);
+  }, [content, delay, flush, template, title]);
 
   const saveLatest = useCallback(async (): Promise<boolean> => {
-    const parsed = updateResumeInputSchema.safeParse({ title, content });
+    const parsed = updateResumeInputSchema.safeParse({ title, content, template });
     if (!parsed.success) {
       setStatus('unsaved');
       return false;
     }
-    if (status === 'saved') return true;
-
     clearTimeout(timer.current);
-    pending.current = { input: parsed.data, version: version.current };
-    return flush();
-  }, [content, flush, status, title]);
+    const explicitVersion = ++version.current;
+    pending.current = { input: parsed.data, version: explicitVersion };
+    const succeeded = await flush();
+    return succeeded && persistedVersion.current >= explicitVersion;
+  }, [content, flush, template, title]);
 
   useEffect(() => {
     if (status === 'saved') return;
