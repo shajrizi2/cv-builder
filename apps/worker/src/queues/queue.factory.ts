@@ -98,8 +98,12 @@ export function createWorkerResources(
             chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
           return Buffer.concat(chunks);
         },
+        async remove(key: string): Promise<void> {
+          await minio.removeObject(config.storage!.bucket, key);
+        },
       },
       mapper,
+      logger,
     ),
     {
       connection: importWorkerConnection,

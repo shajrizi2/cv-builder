@@ -1,11 +1,13 @@
 import {
   resumeImportSchema,
+  resumeImportSourceSchema,
   resumeExportSchema,
   resumeSchema,
   type CreateResumeInput,
   type Resume,
   type UpdateResumeInput,
   type ResumeImport,
+  type ResumeImportSource,
   type ResumeExport,
 } from '@cv-builder/resume-schema';
 
@@ -112,6 +114,9 @@ export async function listResumeImports(): Promise<ResumeImport[]> {
 }
 export async function getResumeImport(id: string): Promise<ResumeImport> {
   return resumeImportSchema.parse(await request(`/resume-imports/${id}`));
+}
+export async function getResumeImportSource(id: string): Promise<ResumeImportSource> {
+  return resumeImportSourceSchema.parse(await request(`/resumes/${id}/import-source`));
 }
 
 export async function listResumes(): Promise<Resume[]> {

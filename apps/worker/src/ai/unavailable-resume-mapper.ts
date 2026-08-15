@@ -3,6 +3,7 @@ import type { AiResumeMapper } from './ai-resume-mapper.js';
 import { ResumeImportProcessingError } from '../imports/import-error.js';
 
 export class UnavailableResumeMapper implements AiResumeMapper {
+  readonly available = false;
   map(): Promise<AiResumeCandidate> {
     return Promise.reject(
       new ResumeImportProcessingError(

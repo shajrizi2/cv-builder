@@ -8,6 +8,12 @@ const labels = {
   COMPLETED: 'Imported',
   FAILED: 'Import failed',
 } as const;
+function completionLabel(item: ResumeImport): string {
+  if (item.status !== 'COMPLETED') return labels[item.status];
+  if (item.completionMode === 'AI_MAPPED') return 'Imported automatically';
+  if (item.completionMode === 'MANUAL_FALLBACK') return 'Imported — manual review needed';
+  return labels.COMPLETED;
+}
 const defaultNavigate = (url: string): void => window.location.assign(url);
 export function ResumeImportPanel({
   navigate = defaultNavigate,
@@ -126,7 +132,7 @@ export function ResumeImportPanel({
       <ul>
         {items.slice(0, 5).map((item) => (
           <li key={item.id}>
-            <span>{item.originalFilename}</span> — <strong>{labels[item.status]}</strong>
+            <span>{item.originalFilename}</span> — <strong>{completionLabel(item)}</strong>
             {item.status === 'FAILED' && item.errorMessage ? `: ${item.errorMessage}` : ''}
           </li>
         ))}

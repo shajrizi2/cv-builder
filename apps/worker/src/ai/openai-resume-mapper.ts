@@ -4,6 +4,7 @@ import { aiResumeCandidateSchema, type AiResumeCandidate } from '@cv-builder/res
 import type { AiResumeMapper } from './ai-resume-mapper.js';
 import { ResumeImportProcessingError } from '../imports/import-error.js';
 export class OpenAiResumeMapper implements AiResumeMapper {
+  readonly available = true;
   private readonly client: OpenAI;
   constructor(
     private readonly model: string,

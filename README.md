@@ -245,25 +245,36 @@ states. Failed saves retain local edits and can be retried.
 ### Existing CV import
 
 The dashboard accepts text-based PDF and modern DOCX files up to 10 MB. Uploads are private in
-MinIO, queued through Valkey, extracted by the standard worker image, mapped with the configured
-OpenAI model, validated against the canonical resume schema, and opened in the existing editor.
+MinIO, queued through Valkey, and extracted by the standard worker image. When OpenAI is configured,
+the worker maps the text into the canonical resume schema. When AI is disabled, unavailable, or
+returns unusable structured data, the import instead completes with a valid empty manual draft and
+an owner-only, read-only source-text panel in the existing editor.
 Scanned/image-only PDFs, OCR, legacy DOC, images, and antivirus scanning are not supported.
 
-Imports require `MINIO_*`, Valkey, `DATABASE_URL`, `OPENAI_API_KEY`, and an explicit
-`OPENAI_MODEL` for the worker. Automated tests use fakes and never call OpenAI. The existing
-Neon-backed web/API-only startup remains valid for ordinary resume CRUD; imports return a safe
-unavailable response until storage and queue configuration are supplied and require the worker to
-complete. Apply committed migrations before enabling imports.
+Imports require `MINIO_*`, Valkey, and `DATABASE_URL`; OpenAI is optional. Both
+`OPENAI_API_KEY` and `OPENAI_MODEL` absent or blank selects manual fallback, while setting both
+enables AI mapping. Setting only one is a worker startup error. No feature flag or placeholder key
+is needed. Automated tests use fakes and synthetic text and never call OpenAI. Apply committed
+migrations before enabling imports.
 
-Uploaded sources remain private and may be retained after successful import. A production
-retention and permanent-deletion policy is unresolved and must be defined before production use.
+Extracted plain text is normalized and bounded to 100,000 characters before persistence and AI
+mapping. Manual fallback retains that text privately; AI-mapped completion clears it. After text is
+durably persisted, the worker best-effort deletes the original private PDF/DOCX and clears its object
+key. A rare failed cleanup is retried on duplicate delivery, but automatic reconciliation is not yet
+implemented.
 If queue submission fails, the import is retained as `FAILED` for visibility and deletion of the
 private source object is attempted as best-effort compensation.
 The API routes are `POST /api/resume-imports`, `GET /api/resume-imports`, and
-`GET /api/resume-imports/:id`.
+`GET /api/resume-imports/:id`. Public import records include nullable `completionMode` and derived
+`hasExtractedText`, never the text itself. The editor uses the authenticated, owner-scoped
+`GET /api/resumes/:resumeId/import-source` route; manually created resumes return `null`.
 
-For a manual AI smoke test, set a real `OPENAI_API_KEY` and `OPENAI_MODEL`, start the complete
-stack, and upload synthetic PDF and DOCX fixtures containing no real personal data.
+For a no-AI smoke test, leave both OpenAI values blank, start the full stack, upload synthetic
+text-based PDF and DOCX fixtures, verify `MANUAL_FALLBACK`, open the source panel, edit and reload,
+switch templates, export a selectable-text PDF, and verify a second synthetic user receives 404s
+for the first user's resources. A corrupt or image-only fixture must still fail. For an optional
+real-provider smoke test, set both OpenAI values and use only synthetic fixtures; never commit the
+credentials or use personal CVs.
 
 ## API application
 
@@ -588,6 +599,11 @@ nullable fields preserve pre-authentication data; application writes always supp
 ordinary queries never expose null-owned rows. Existing migrations must never be edited after they
 have been applied.
 
+The committed `20260815190000_add_ai_optional_import_fallback` migration adds nullable import mode
+and extracted-text fields and makes the source object key nullable for post-extraction cleanup.
+Deploy it to a reviewed target with `npm run db:migrate:deploy`. Deployment to the real Neon
+database remains a manual, explicitly approved operation.
+
 Inspect legacy unowned rows without reading CV content, filenames, or object keys:
 
 ```bash
@@ -662,8 +678,11 @@ Use only disposable volumes, credentials, synthetic users, and synthetic resume 
    export status, and PDF are inaccessible.
 6. Confirm both health endpoints, private MinIO policy, non-root users, and sandboxed Chromium
    under `docker/chromium-seccomp.json`.
-7. Run CV import regressions with fake mapper tests; do not make an external AI call.
-8. Stop the stack and remove volumes only after confirming they are the disposable smoke resources.
+7. Leave both OpenAI values blank; upload synthetic PDF/DOCX files, confirm manual fallback and the
+   escaped source panel, then edit, reload, change templates, export, and check cross-user denial.
+8. Optionally repeat with a complete real OpenAI pair and synthetic data; keep this separate from
+   automated tests.
+9. Stop the stack and remove volumes only after confirming they are the disposable smoke resources.
 
 This repository is release-ready, not automatically deployed. Production domain/TLS, real secret
 provisioning, reviewed Neon migration, backups, monitoring, and provider deployment remain operator
@@ -672,7 +691,7 @@ responsibilities.
 Known MVP limitations: dates are free-form; autosave does not offer multi-client conflict
 detection; password reset and email verification have no delivery infrastructure; social login,
 MFA, OCR, antivirus scanning, version history, collaboration, teams, billing, additional templates,
-and automated retention/deletion remain deferred. A bearer JWT already issued before signout stays
+and automatic reconciliation of rare source-cleanup failures remain deferred. A bearer JWT already issued before signout stays
 cryptographically valid until its 15-minute expiry; signout removes the database session, prevents
-new token issuance, and clears the browser's in-memory token. Imported sources and generated PDFs
-may be retained until an explicit deletion policy is implemented.
+new token issuance, and clears the browser's in-memory token. Generated PDFs and original imports
+whose best-effort cleanup failed may remain until an explicit deletion/reconciliation policy exists.

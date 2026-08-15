@@ -8,8 +8,9 @@ import {
   resumeTemplateIds,
 } from '@cv-builder/resume-schema';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAutosave } from '@/hooks/use-autosave';
+import { getResumeImportSource } from '@/lib/resumes-api';
 import { ResumePreview } from './resume-preview';
 import { ResumeExportPanel } from './resume-export';
 
@@ -29,6 +30,10 @@ export function ResumeEditor({ initialResume }: { initialResume: Resume }) {
   const [title, setTitle] = useState(initialResume.title);
   const [content, setContent] = useState(initialResume.content);
   const [template, setTemplate] = useState(initialResume.template);
+  const [importSource, setImportSource] = useState<
+    Awaited<ReturnType<typeof getResumeImportSource>> | undefined
+  >();
+  const [sourceLookupFailed, setSourceLookupFailed] = useState(false);
   const validation = updateResumeInputSchema.safeParse({ title, content, template });
   const { status, retry, saveLatest, isNavigationSafe } = useAutosave(
     initialResume.id,
@@ -36,6 +41,20 @@ export function ResumeEditor({ initialResume }: { initialResume: Resume }) {
     content,
     template,
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void getResumeImportSource(initialResume.id)
+      .then((source) => {
+        if (!cancelled) setImportSource(source);
+      })
+      .catch(() => {
+        if (!cancelled) setSourceLookupFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialResume.id]);
 
   async function returnToDashboard() {
     if (isNavigationSafe || (await saveLatest())) router.push('/');
@@ -137,6 +156,28 @@ export function ResumeEditor({ initialResume }: { initialResume: Resume }) {
             ))}
           </ul>
         </div>
+      )}
+      {importSource?.completionMode === 'AI_MAPPED' && (
+        <p className="import-success" role="status">
+          Your CV was imported and mapped automatically.
+        </p>
+      )}
+      {importSource?.completionMode === 'MANUAL_FALLBACK' && (
+        <section className="import-source" aria-labelledby="import-source-message">
+          <p id="import-source-message">
+            Your CV was imported, but automatic mapping was unavailable. Review the imported text
+            and complete your resume manually.
+          </p>
+          <details>
+            <summary>Imported CV text</summary>
+            <pre aria-label="Imported CV text">{importSource.extractedText}</pre>
+          </details>
+        </section>
+      )}
+      {sourceLookupFailed && (
+        <p className="source-warning" role="status">
+          Imported source text is temporarily unavailable. You can continue editing your resume.
+        </p>
       )}
       <div className="workspace-columns">
         <div className="editor-panel">

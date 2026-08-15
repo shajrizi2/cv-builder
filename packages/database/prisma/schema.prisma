@@ -135,6 +135,11 @@ enum ResumeImportStatus {
   FAILED
 }
 
+enum ResumeImportMode {
+  AI_MAPPED
+  MANUAL_FALLBACK
+}
+
 model ResumeImport {
   id               String             @id @default(uuid()) @db.Uuid
   ownerId          String?            @db.Uuid
@@ -142,8 +147,10 @@ model ResumeImport {
   originalFilename String             @db.VarChar(255)
   mimeType         String             @db.VarChar(100)
   fileSize         Int
-  objectKey        String             @unique @db.VarChar(512)
+  objectKey        String?            @unique @db.VarChar(512)
   status           ResumeImportStatus @default(QUEUED)
+  completionMode   ResumeImportMode?
+  extractedText    String?            @db.Text
   errorCode        String?            @db.VarChar(100)
   errorMessage     String?            @db.VarChar(500)
   resumeId         String?            @unique @db.Uuid

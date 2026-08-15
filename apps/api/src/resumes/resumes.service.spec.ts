@@ -74,4 +74,52 @@ describe('ResumesService', () => {
       ),
     ).rejects.toMatchObject({ status: 404 });
   });
+
+  it('returns an owner-scoped manual import source and no private storage fields', async () => {
+    const importId = '550e8400-e29b-41d4-a716-446655440010';
+    const { service, resume } = makeService({
+      findFirst: vi.fn().mockResolvedValue({
+        ...record,
+        sourceImport: {
+          id: importId,
+          ownerId,
+          resumeId: id,
+          status: 'COMPLETED',
+          completionMode: 'MANUAL_FALLBACK',
+          extractedText: 'Synthetic imported text',
+        },
+      }),
+    });
+    await expect(service.getImportSource(ownerId, id)).resolves.toEqual({
+      importId,
+      completionMode: 'MANUAL_FALLBACK',
+      extractedText: 'Synthetic imported text',
+    });
+    expect(resume.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id, ownerId } }),
+    );
+  });
+
+  it('returns null for manual resumes and hides unowned or inconsistent import sources', async () => {
+    await expect(
+      makeService({
+        findFirst: vi.fn().mockResolvedValue({ ...record, sourceImport: null }),
+      }).service.getImportSource(ownerId, id),
+    ).resolves.toBeNull();
+    await expect(
+      makeService({
+        findFirst: vi.fn().mockResolvedValue({
+          ...record,
+          sourceImport: {
+            id: '550e8400-e29b-41d4-a716-446655440010',
+            ownerId: null,
+            resumeId: id,
+            status: 'COMPLETED',
+            completionMode: 'MANUAL_FALLBACK',
+            extractedText: 'private',
+          },
+        }),
+      }).service.getImportSource(ownerId, id),
+    ).rejects.toMatchObject({ status: 404 });
+  });
 });

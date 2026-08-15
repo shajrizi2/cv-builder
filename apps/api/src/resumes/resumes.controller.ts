@@ -14,6 +14,7 @@ import {
   updateResumeInputSchema,
   type CreateResumeInput,
   type Resume,
+  type ResumeImportSource,
   type UpdateResumeInput,
 } from '@cv-builder/resume-schema';
 
@@ -45,6 +46,14 @@ export class ResumesController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<Resume> {
     return this.resumes.get(user.id, id);
+  }
+
+  @Get(':id/import-source')
+  getImportSource(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<ResumeImportSource> {
+    return this.resumes.getImportSource(user.id, id);
   }
 
   @Patch(':id')

@@ -33,6 +33,8 @@ const importA = {
   fileSize: 10,
   objectKey: 'private',
   status: 'QUEUED',
+  completionMode: null,
+  extractedText: null,
   errorCode: null,
   errorMessage: null,
   resumeId: null,

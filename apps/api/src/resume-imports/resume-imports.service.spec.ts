@@ -36,6 +36,8 @@ const record = {
   fileSize: 9,
   objectKey: 'imports/private-object-key',
   status: 'QUEUED',
+  completionMode: null,
+  extractedText: null,
   errorCode: null,
   errorMessage: null,
   resumeId: null,
@@ -98,6 +100,11 @@ describe('ResumeImportsService', () => {
     const value = toPublicResumeImport(record);
     expect(value.id).toBe(record.id);
     expect(value).not.toHaveProperty('objectKey');
+    expect(value).not.toHaveProperty('extractedText');
+    expect(value).toMatchObject({ completionMode: null, hasExtractedText: false });
+    expect(toPublicResumeImport({ ...record, extractedText: 'Synthetic text' })).toMatchObject({
+      hasExtractedText: true,
+    });
   });
   it('returns valid public responses from create, list, and get', async () => {
     storage.putObject.mockResolvedValue(undefined);
