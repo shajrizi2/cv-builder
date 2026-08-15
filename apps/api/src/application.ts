@@ -32,6 +32,7 @@ export function configureApplication(app: NestFastifyApplication): void {
   );
   app.enableCors({
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     origin: apiConfig.corsOrigins,
   });
   app.enableShutdownHooks();

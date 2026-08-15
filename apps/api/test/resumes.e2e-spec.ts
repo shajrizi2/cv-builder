@@ -62,6 +62,23 @@ afterEach(async () => {
 });
 
 describe('resume HTTP API', () => {
+  it('allows browser preflight requests for resume deletion', async () => {
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: `/api/resumes/${id}`,
+      headers: {
+        origin: 'http://localhost:3000',
+        'access-control-request-method': 'DELETE',
+        'access-control-request-headers': 'authorization,content-type',
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+    expect(response.headers['access-control-allow-methods']?.split(',').map((method) => method.trim()))
+      .toContain('DELETE');
+  });
+
   it('supports create, list, get, update, and delete', async () => {
     const created = await app.inject({
       method: 'POST',
