@@ -10,6 +10,15 @@ services:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: '3000'
+      DATABASE_URL: 'postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}'
+      BETTER_AUTH_SECRET: '${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}'
+      BETTER_AUTH_URL: '${BETTER_AUTH_URL:-http://localhost:3000}'
+      BETTER_AUTH_TRUSTED_ORIGINS: '${BETTER_AUTH_TRUSTED_ORIGINS:-http://localhost:3000}'
+      API_JWT_ISSUER: '${API_JWT_ISSUER:-http://localhost:3000}'
+      API_JWT_AUDIENCE: '${API_JWT_AUDIENCE:-cv-builder-api}'
+    depends_on:
+      postgres:
+        condition: service_healthy
     init: true
     networks:
       - app-network
@@ -49,6 +58,9 @@ services:
       MINIO_ACCESS_KEY: '${MINIO_ROOT_USER}'
       MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD}'
       MINIO_BUCKET: '${MINIO_BUCKET:-cv-imports}'
+      AUTH_JWKS_URL: 'http://web:3000/api/auth/jwks'
+      API_JWT_ISSUER: '${API_JWT_ISSUER:-http://localhost:3000}'
+      API_JWT_AUDIENCE: '${API_JWT_AUDIENCE:-cv-builder-api}'
     init: true
     networks:
       - app-network

@@ -19,7 +19,9 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/worker/package.json ./apps/worker/package.json
 COPY packages/eslint-config/package.json ./packages/eslint-config/package.json
+COPY packages/database/package.json ./packages/database/package.json
 COPY packages/resume-schema/package.json ./packages/resume-schema/package.json
+COPY packages/templates/package.json ./packages/templates/package.json
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --workspace=@cv-builder/web --include-workspace-root
@@ -41,10 +43,14 @@ ENV NODE_ENV=production
 COPY tsconfig.base.json turbo.json ./
 COPY apps/web ./apps/web
 COPY packages/eslint-config ./packages/eslint-config
+COPY packages/database ./packages/database
 COPY packages/resume-schema ./packages/resume-schema
+COPY packages/templates ./packages/templates
 
 RUN mkdir -p apps/web/public \
+    && npm run build --workspace=@cv-builder/database \
     && npm run build --workspace=@cv-builder/resume-schema \
+    && npm run build --workspace=@cv-builder/templates \
     && npm run build --workspace=@cv-builder/web
 
 FROM base AS production

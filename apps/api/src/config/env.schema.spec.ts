@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { validateEnvironment } from './env.schema';
 
+const productionAuth = {
+  AUTH_JWKS_URL: 'https://cv.example/api/auth/jwks',
+  API_JWT_ISSUER: 'https://cv.example',
+  API_JWT_AUDIENCE: 'cv-builder-api',
+};
+
 describe('validateEnvironment', () => {
   it('uses safe development defaults', () => {
     expect(validateEnvironment({})).toEqual({
@@ -16,6 +22,9 @@ describe('validateEnvironment', () => {
       minioPort: 9000,
       minioUseSsl: false,
       minioBucket: 'cv-imports',
+      authJwksUrl: 'http://localhost:3000/api/auth/jwks',
+      apiJwtIssuer: 'http://localhost:3000',
+      apiJwtAudience: 'cv-builder-api',
     });
   });
 
@@ -40,6 +49,9 @@ describe('validateEnvironment', () => {
       minioPort: 9000,
       minioUseSsl: false,
       minioBucket: 'cv-imports',
+      authJwksUrl: 'http://localhost:3000/api/auth/jwks',
+      apiJwtIssuer: 'http://localhost:3000',
+      apiJwtAudience: 'cv-builder-api',
     });
   });
 
@@ -84,6 +96,7 @@ describe('validateEnvironment', () => {
       validateEnvironment({
         NODE_ENV: 'production',
         CORS_ORIGINS: 'https://example.com',
+        ...productionAuth,
       }).swaggerEnabled,
     ).toBe(false);
   });
@@ -94,8 +107,15 @@ describe('validateEnvironment', () => {
         NODE_ENV: 'production',
         CORS_ORIGINS: 'https://example.com',
         SWAGGER_ENABLED: 'true',
+        ...productionAuth,
       }).swaggerEnabled,
     ).toBe(true);
+  });
+
+  it('requires all JWT verification settings in production', () => {
+    expect(() =>
+      validateEnvironment({ NODE_ENV: 'production', CORS_ORIGINS: 'https://example.com' }),
+    ).toThrow('API_JWT_AUDIENCE');
   });
 
   it('parses complete Redis queue connection configuration', () => {

@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { ResumesModule } from './resumes/resumes.module';
 import { ResumeImportsModule } from './resume-imports/resume-imports.module';
 import { ResumeExportsModule } from './resume-exports/resume-exports.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ResumeExportsModule } from './resume-exports/resume-exports.module';
       load: [configuration],
     }),
     DatabaseModule,
+    AuthModule,
     HealthModule,
     ResumesModule,
     ResumeImportsModule,

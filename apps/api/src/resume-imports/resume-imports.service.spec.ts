@@ -42,6 +42,7 @@ const record = {
   createdAt: new Date('2026-08-06T10:00:00.000Z'),
   updatedAt: new Date('2026-08-06T10:00:00.000Z'),
 };
+const ownerId = '550e8400-e29b-41d4-a716-446655440001';
 const environment = {
   redisHost: 'redis',
   redisPort: 6379,
@@ -75,14 +76,14 @@ function harness(): {
   resumeImport: {
     create: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
-    findUnique: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
 } {
   const resumeImport = {
     create: vi.fn().mockResolvedValue(record),
     findMany: vi.fn().mockResolvedValue([record]),
-    findUnique: vi.fn().mockResolvedValue(record),
+    findFirst: vi.fn().mockResolvedValue(record),
     update: vi.fn().mockResolvedValue({ ...record, status: 'FAILED' }),
   };
   const database = { client: { resumeImport } } as unknown as DatabaseService;
@@ -102,11 +103,11 @@ describe('ResumeImportsService', () => {
     storage.putObject.mockResolvedValue(undefined);
     queue.add.mockResolvedValue({});
     queue.close.mockResolvedValue(undefined);
-    const { service } = harness();
+    const { service, resumeImport } = harness();
     for (const value of [
-      await service.create(request()),
-      ...(await service.list()),
-      await service.get(record.id),
+      await service.create(ownerId, request()),
+      ...(await service.list(ownerId)),
+      await service.get(ownerId, record.id),
     ]) {
       expect(value.id).toBe(record.id);
       expect(value).not.toHaveProperty('objectKey');
@@ -129,6 +130,11 @@ describe('ResumeImportsService', () => {
       { importId: record.id },
       expect.any(Object),
     );
+    expect(resumeImport.create).toHaveBeenCalledWith(
+      // Vitest's nested asymmetric matcher is intentionally untyped test data.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      expect.objectContaining({ data: expect.objectContaining({ ownerId }) }),
+    );
   });
   it('marks queue failures failed and attempts private object deletion', async () => {
     storage.putObject.mockResolvedValue(undefined);
@@ -136,7 +142,7 @@ describe('ResumeImportsService', () => {
     queue.add.mockRejectedValue(new Error('queue down'));
     queue.close.mockResolvedValue(undefined);
     const { service, resumeImport } = harness();
-    await expect(service.create(request())).rejects.toMatchObject({ status: 503 });
+    await expect(service.create(ownerId, request())).rejects.toMatchObject({ status: 503 });
     expect(resumeImport.update).toHaveBeenCalledWith(
       // Vitest's asymmetric matchers are intentionally untyped test data.
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment

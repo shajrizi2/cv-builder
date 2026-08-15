@@ -9,6 +9,8 @@ datasource db {
 
 model Resume {
   id           String         @id @default(uuid()) @db.Uuid
+  ownerId      String?        @db.Uuid
+  owner        User?          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title        String         @db.VarChar(200)
   content      Json
   createdAt    DateTime       @default(now())
@@ -18,6 +20,80 @@ model Resume {
   exports      ResumeExport[]
 
   @@index([updatedAt])
+  @@index([ownerId, updatedAt])
+}
+
+model User {
+  id            String         @id @default(uuid()) @db.Uuid
+  name          String
+  email         String         @unique
+  emailVerified Boolean        @default(false)
+  image         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  resumes       Resume[]
+  resumeImports ResumeImport[]
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(uuid()) @db.Uuid
+  accountId             String
+  providerId            String
+  userId                String    @db.Uuid
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Jwks {
+  id         String    @id @default(uuid()) @db.Uuid
+  publicKey  String
+  privateKey String
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+}
+
+model RateLimit {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  count       Int
+  lastRequest BigInt
 }
 
 enum ResumeTemplate {
@@ -61,6 +137,8 @@ enum ResumeImportStatus {
 
 model ResumeImport {
   id               String             @id @default(uuid()) @db.Uuid
+  ownerId          String?            @db.Uuid
+  owner            User?              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   originalFilename String             @db.VarChar(255)
   mimeType         String             @db.VarChar(100)
   fileSize         Int
@@ -74,5 +152,6 @@ model ResumeImport {
   updatedAt        DateTime           @updatedAt
 
   @@index([createdAt])
+  @@index([ownerId, createdAt])
   @@index([status, updatedAt])
 }

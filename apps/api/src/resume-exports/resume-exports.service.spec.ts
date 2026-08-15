@@ -38,6 +38,7 @@ vi.mock('minio', () => ({
 
 const exportId = '550e8400-e29b-41d4-a716-446655440010';
 const resumeId = '550e8400-e29b-41d4-a716-446655440011';
+const ownerId = '550e8400-e29b-41d4-a716-446655440012';
 const record = {
   id: exportId,
   resumeId,
@@ -78,7 +79,7 @@ function harness(status = 'QUEUED'): {
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
   };
   const resume = {
-    findUnique: vi.fn().mockResolvedValue({
+    findFirst: vi.fn().mockResolvedValue({
       id: resumeId,
       title: record.resumeTitle,
       content: record.resumeContent,
@@ -98,7 +99,7 @@ describe('ResumeExportsService', () => {
     queue.add.mockResolvedValue({});
     queue.close.mockResolvedValue(undefined);
     const { service } = harness();
-    const value = await service.create(resumeId);
+    const value = await service.create(ownerId, resumeId);
     expect(value).not.toHaveProperty('objectKey');
     expect(toPublicResumeExport(record)).not.toHaveProperty('objectKey');
     expect(queueConstruction).toEqual({
@@ -124,7 +125,7 @@ describe('ResumeExportsService', () => {
     queue.add.mockRejectedValue(new Error('private redis detail'));
     queue.close.mockResolvedValue(undefined);
     const { service, resumeExport } = harness();
-    await expect(service.create(resumeId)).rejects.toMatchObject({ status: 503 });
+    await expect(service.create(ownerId, resumeId)).rejects.toMatchObject({ status: 503 });
     expect(resumeExport.updateMany).toHaveBeenCalledWith(
       // Vitest asymmetric matchers intentionally represent untyped test data.
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -135,12 +136,12 @@ describe('ResumeExportsService', () => {
     const stream = Readable.from([Buffer.from('%PDF-test')]);
     storage.getObject.mockResolvedValue(stream);
     const { service } = harness('COMPLETED');
-    await expect(service.download(exportId)).resolves.toEqual({
+    await expect(service.download(ownerId, exportId)).resolves.toEqual({
       bytes: Buffer.from('%PDF-test'),
       filename: 'Synthetic Resume.pdf',
     });
     expect(sanitizePdfFilename('../<>')).toBe('resume.pdf');
-    await expect(harness('PROCESSING').service.download(exportId)).rejects.toMatchObject({
+    await expect(harness('PROCESSING').service.download(ownerId, exportId)).rejects.toMatchObject({
       status: 409,
     });
   });

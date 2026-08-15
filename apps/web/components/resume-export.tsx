@@ -6,7 +6,7 @@ import {
   createResumeExport,
   getLatestResumeExport,
   getResumeExport,
-  resumeExportDownloadUrl,
+  downloadResumeExport,
 } from '@/lib/resumes-api';
 
 const POLL_MS = 1500;
@@ -80,6 +80,16 @@ export function ResumeExportPanel({
     }
   }
 
+  async function download() {
+    if (!item) return;
+    setError('');
+    try {
+      await downloadResumeExport(item.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not download PDF');
+    }
+  }
+
   const active = item?.status === 'QUEUED' || item?.status === 'PROCESSING';
   return (
     <section className="export-panel" aria-label="PDF export">
@@ -88,7 +98,11 @@ export function ResumeExportPanel({
       </button>
       {item?.status === 'QUEUED' && <p role="status">Queued</p>}
       {item?.status === 'PROCESSING' && <p role="status">Generating PDF</p>}
-      {item?.status === 'COMPLETED' && <a href={resumeExportDownloadUrl(item.id)}>Download PDF</a>}
+      {item?.status === 'COMPLETED' && (
+        <button className="secondary" onClick={() => void download()}>
+          Download PDF
+        </button>
+      )}
       {item?.status === 'FAILED' && (
         <p className="error-banner" role="alert">
           {item.errorMessage || 'PDF export failed. Please try again.'}

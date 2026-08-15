@@ -19,6 +19,8 @@ import {
 
 import { ResumeValidationPipe } from './resume-validation.pipe';
 import { ResumesService } from './resumes.service';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/authenticated-user';
 
 @Controller('resumes')
 export class ResumesController {
@@ -26,32 +28,40 @@ export class ResumesController {
 
   @Post()
   create(
+    @CurrentUser() user: AuthenticatedUser,
     @Body(new ResumeValidationPipe(createResumeInputSchema)) body: CreateResumeInput,
   ): Promise<Resume> {
-    return this.resumes.create(body);
+    return this.resumes.create(user.id, body);
   }
 
   @Get()
-  list(): Promise<Resume[]> {
-    return this.resumes.list();
+  list(@CurrentUser() user: AuthenticatedUser): Promise<Resume[]> {
+    return this.resumes.list(user.id);
   }
 
   @Get(':id')
-  get(@Param('id', new ParseUUIDPipe()) id: string): Promise<Resume> {
-    return this.resumes.get(id);
+  get(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<Resume> {
+    return this.resumes.get(user.id, id);
   }
 
   @Patch(':id')
   update(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body(new ResumeValidationPipe(updateResumeInputSchema)) body: UpdateResumeInput,
   ): Promise<Resume> {
-    return this.resumes.update(id, body);
+    return this.resumes.update(user.id, id, body);
   }
 
   @Delete(':id')
   @HttpCode(204)
-  async delete(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
-    await this.resumes.delete(id);
+  async delete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    await this.resumes.delete(user.id, id);
   }
 }

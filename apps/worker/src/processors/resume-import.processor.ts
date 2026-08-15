@@ -27,6 +27,26 @@ export function createResumeImportProcessor(
     if (!record) throw new Error('Resume import was not found');
     if (record.status === 'COMPLETED' && record.resumeId) return { resumeId: record.resumeId };
     if (record.status === 'FAILED') throw new Error('Resume import has already failed');
+    if (!record.ownerId) {
+      const failed = await database.resumeImport.updateMany({
+        where: { id: importId, ownerId: null, status: { in: ['QUEUED', 'PROCESSING'] } },
+        data: {
+          status: 'FAILED',
+          errorCode: 'PROCESSING_FAILED',
+          errorMessage: 'This import cannot be processed automatically.',
+        },
+      });
+      if (failed.count === 0) {
+        const current = await database.resumeImport.findUnique({ where: { id: importId } });
+        if (current?.status === 'COMPLETED' && current.resumeId)
+          return { resumeId: current.resumeId };
+      }
+      throw new ResumeImportProcessingError(
+        'PROCESSING_FAILED',
+        'This import cannot be processed automatically.',
+        false,
+      );
+    }
     const claimed = await database.resumeImport.updateMany({
       where: { id: importId, status: { in: ['QUEUED', 'PROCESSING'] } },
       data: { status: 'PROCESSING', errorCode: null, errorMessage: null },
@@ -54,8 +74,16 @@ export function createResumeImportProcessor(
         await tx.$queryRaw`SELECT id FROM "ResumeImport" WHERE id = ${importId}::uuid FOR UPDATE`;
         const locked = await tx.resumeImport.findUniqueOrThrow({ where: { id: importId } });
         if (locked.status === 'COMPLETED' && locked.resumeId) return { resumeId: locked.resumeId };
+        if (!locked.ownerId) {
+          throw new ResumeImportProcessingError(
+            'PROCESSING_FAILED',
+            'This legacy import has no owner and cannot be processed automatically.',
+            false,
+          );
+        }
         const resume = await tx.resume.create({
           data: {
+            ownerId: locked.ownerId,
             title: locked.originalFilename.replace(/\.(pdf|docx)$/i, '') || 'Imported resume',
             content,
           },

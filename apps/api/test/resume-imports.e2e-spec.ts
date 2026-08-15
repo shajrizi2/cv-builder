@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/application';
 import { DatabaseService } from '../src/database/database.module';
+import { JwtVerifierService } from '../src/auth/jwt-verifier.service';
+import { addSyntheticAuthorization, testJwtVerifier } from './auth-test-helper';
 
 let app: NestFastifyApplication;
 const boundary = 'cv-builder-boundary';
@@ -34,10 +36,13 @@ const pdf = (name = 'file'): { name: string; filename: string; type: string; val
 beforeEach(async () => {
   process.env.NODE_ENV = 'test';
   const module = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(JwtVerifierService)
+    .useValue(testJwtVerifier)
     .overrideProvider(DatabaseService)
     .useValue({ client: { resumeImport: {} } })
     .compile();
   app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+  addSyntheticAuthorization(app);
   await app.register(multipart, { limits: { files: 1, fileSize: 10 * 1024 * 1024 } });
   configureApplication(app);
   await app.init();
