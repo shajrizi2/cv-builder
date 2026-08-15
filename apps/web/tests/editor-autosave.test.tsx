@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({
   createResumeExport: vi.fn(),
   getLatestResumeExport: vi.fn(),
   getResumeExport: vi.fn(),
-  resumeExportDownloadUrl: vi.fn((id: string) => `/exports/${id}`),
+  downloadResumeExport: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('@/lib/resumes-api', () => api);

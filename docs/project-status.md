@@ -6,7 +6,7 @@ Dockerized Web-Based CV Builder
 
 ## Current Phase
 
-MVP core resume workspace
+Planned MVP core complete — release-ready repository
 
 ## Current Sprint
 
@@ -33,6 +33,7 @@ Sprint 2 — MVP Core
 - [x] CVB-020 — Built the resume workspace vertical slice
 - [x] CVB-021 — Existing CV upload and AI import
 - [x] CVB-022 — Resume templates and PDF export
+- [x] CVB-023 — Authentication, resource ownership, and MVP release validation
 
 ## In Progress
 
@@ -42,21 +43,30 @@ None
 
 None
 
-## Planned Architecture
+## MVP Complete
 
-- Monorepo
-- TypeScript
-- Next.js frontend
-- NestJS backend API
-- BullMQ background worker
-- PostgreSQL
-- Prisma ORM
-- Redis
-- MinIO for local object storage
-- ClamAV for uploaded-file scanning
-- Playwright and Chromium for PDF generation
-- Nginx reverse proxy
-- Docker and Docker Compose
+- Authenticated resume workspace
+- Existing PDF/DOCX CV import
+- Classic and Modern resume templates
+- Asynchronous private PDF export
+- Better Auth email/password sessions
+- Cryptographically verified API JWT/JWKS boundary
+- Per-user resume, import, export, and download ownership
+- Docker/Compose release validation
+
+## Deferred/Post-MVP
+
+- CVB-019 shared validation
+- OCR and scanned CV support
+- Antivirus/ClamAV
+- Automated source/export retention and deletion
+- Version history and collaboration
+- Teams, organizations, and billing
+- Advanced AI editing, ATS scoring, and cover letters
+- Additional templates
+- Social authentication and MFA
+- Password-reset and verification email infrastructure
+- CI/CD and provider-specific public-cloud deployment
 
 ## Repository Applications
 
@@ -97,7 +107,7 @@ npm run format:check
 
 ## Next Ticket
 
-Not started
+No additional MVP ticket is planned. CVB-019 remains deferred.
 
 ## CVB-020 Delivered Architecture
 
@@ -105,14 +115,14 @@ Not started
 - PostgreSQL stores each validated resume document as JSONB in the `Resume` model.
 - NestJS exposes strict CRUD below `/api/resumes`.
 - Next.js provides the dashboard, responsive editor, serialized autosave, and live template preview.
-- Authentication and OCR remain out of scope.
+- Authentication is delivered by CVB-023; OCR remains deferred.
 
 ## CVB-021 Delivered Architecture
 
 - Private PDF/DOCX uploads are validated and stored in MinIO.
 - A dedicated BullMQ queue extracts selectable text and maps it into the canonical resume schema.
 - Imports recover on dashboard refresh and redirect to the existing editor when complete.
-- ClamAV, OCR, authentication, and a production source-file retention policy remain deferred.
+- ClamAV, OCR, and a production source-file retention policy remain deferred.
 
 ## CVB-022 Delivered Architecture
 
@@ -121,4 +131,22 @@ Not started
 - PDF exports persist immutable title/content/template snapshots and asynchronous lifecycle state.
 - A dedicated BullMQ queue renders A4 PDFs with system Chromium and stores them privately in MinIO.
 - Downloads flow through the API and never expose object keys, bucket details, or storage credentials.
-- Authentication/ownership, antivirus, OCR, version history, and automatic export retention/deletion remain deferred.
+- Antivirus, OCR, version history, and automatic export retention/deletion remain deferred.
+
+## CVB-023 Delivered Architecture
+
+- Better Auth runs in Next.js with email/password credentials, PostgreSQL sessions, explicit
+  trusted origins, database-backed rate limiting, minimal-claim ES256 JWTs, and encrypted JWKS
+  private-key storage.
+- NestJS globally protects business routes and independently verifies algorithm, signature,
+  issuer, audience, expiry, and UUID subject; health remains anonymous.
+- Resume and ResumeImport store nullable migration-compatible owners. All new writes require an
+  authenticated owner, and ordinary APIs exclude legacy null-owned rows.
+- Import workers derive ownership from persisted imports and reject ownerless imports before any
+  document access or AI call; export and authenticated PDF download authorization derive through
+  the owned resume.
+- API JWTs remain in browser memory only. PDF bytes use authenticated fetch; private MinIO
+  identifiers are never exposed.
+- CVB-023 adds one non-destructive Prisma migration and a read-only legacy ownership audit query.
+- The repository is release-ready but is not claimed to be publicly deployed. Production secret,
+  domain/trusted-origin configuration, Neon migration deployment, and hosting remain manual.

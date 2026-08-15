@@ -22,7 +22,8 @@ infrastructure/
   scripts/       Infrastructure scripts placeholder
 ```
 
-CVB-020 provides the first complete resume workspace; later capabilities remain placeholders.
+The planned MVP core is complete: authenticated users can create or import private resumes, edit
+and preview them, select a template, and generate private PDF exports.
 
 ## Requirements
 
@@ -63,6 +64,12 @@ CORS_ORIGINS=http://localhost:3000
 NEXT_PUBLIC_APP_NAME='CV Builder'
 NEXT_PUBLIC_API_URL=http://localhost:3001/api
 DATABASE_URL='postgresql://USER:PASSWORD@NEON_HOST/neondb?sslmode=require&channel_binding=require'
+BETTER_AUTH_SECRET='replace-with-at-least-32-random-characters'
+BETTER_AUTH_URL=http://localhost:3000
+BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000
+API_JWT_ISSUER=http://localhost:3000
+API_JWT_AUDIENCE=cv-builder-api
+AUTH_JWKS_URL=http://localhost:3000/api/auth/jwks
 ```
 
 Load and export the root environment in the terminal before using workspace scripts:
@@ -103,10 +110,10 @@ Open `http://localhost:3000`. The API health endpoint is
 `http://localhost:3001/api/health`. Application startup never deploys migrations automatically;
 run `db:migrate:deploy` again only when a later change adds a new committed migration.
 
-The complete `compose.yaml` stack is intended for the bundled PostgreSQL service and injects its
-internal database URL into the API. Do not use that complete stack unchanged when the API should
-connect to Neon; start the applications as shown above or run the individual production images
-with `--env-file .env`.
+Both the web auth server and API require the same PostgreSQL database. The complete `compose.yaml`
+stack is intended for bundled PostgreSQL and injects its internal URL into both applications. Do
+not use that stack unchanged when they should connect to Neon; start the applications as shown
+above or run the individual production images with reviewed runtime configuration.
 
 ## Root commands
 
@@ -195,6 +202,38 @@ The browser calls `NEXT_PUBLIC_API_URL`, which defaults to `http://localhost:300
 `NEXT_PUBLIC_APP_NAME` defaults to `CV Builder`. Public values are embedded at build time and must
 never contain secrets.
 
+### Authentication and private resources
+
+Better Auth `1.6.29` runs in Next.js at `/api/auth/[...all]`. MVP authentication supports
+name/email/password signup, email/password signin, database-backed sessions, signout, explicit
+trusted origins, and database-backed rate limiting. Better Auth owns credential hashing and
+session cookies; the application does not implement password cryptography.
+
+The dashboard and `/resumes/:id` require a server-validated session. The browser derives a
+short-lived ES256 JWT from that session and sends it as a bearer token to NestJS. The JWT payload is
+limited to `sub`, `iss`, `aud`, `iat`, and `exp`; encrypted signing keys remain in PostgreSQL. Tokens
+are cached in memory only and never written to local or session storage. NestJS validates the
+signature from Better Auth JWKS plus the exact algorithm, issuer, audience, expiry, and UUID subject.
+`GET /api/health` remains anonymous; resume, import, export, and PDF routes are protected.
+
+Required server-only values are `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
+`BETTER_AUTH_TRUSTED_ORIGINS`, `API_JWT_ISSUER`, `API_JWT_AUDIENCE`, and `AUTH_JWKS_URL` for a
+directly started API. Compose supplies the API's internal JWKS URL while preserving the public
+issuer. Generate a unique high-entropy `BETTER_AUTH_SECRET` for production and provide it through
+the deployment secret mechanism. Never expose it through `NEXT_PUBLIC_*`, build arguments, logs,
+or source control.
+
+Every new resume and import records the verified user. Imported resumes inherit the persisted
+import owner in the worker. The worker permanently rejects an ownerless legacy import before
+reading its object, extracting content, or invoking AI. Export access derives through the owned
+resume. Other-user, unknown, and pre-authentication unowned resources return privacy-preserving
+not-found responses. PDF downloads use authenticated fetch and a browser Blob, never a bearer-less
+link or public MinIO URL.
+
+If a session expires while editing, autosave remains failed/unsaved and the page displays a signin
+action without clearing local editor state. Refreshing or navigating away can still lose in-memory
+changes; the existing before-unload warning remains the MVP safeguard.
+
 ### Resume workspace
 
 The home page is the resume dashboard. Users can create, open, rename, and delete resumes. The
@@ -267,6 +306,10 @@ Resume routes are `POST /api/resumes`, `GET /api/resumes`, `GET /api/resumes/:id
 `PATCH /api/resumes/:id`, and `DELETE /api/resumes/:id`. UUID parameters and strict request bodies
 are validated. Stored JSON and returned resume data are checked against the canonical schema;
 missing records consistently return `404`.
+
+All business routes require a valid bearer token. Missing, unowned, and other-user records use the
+same not-found behavior. `AUTH_JWKS_URL`, `API_JWT_ISSUER`, and `API_JWT_AUDIENCE` are mandatory in
+production.
 
 ## Resume schema
 
@@ -539,8 +582,21 @@ npm run db:migrate:deploy
 
 `db:migrate:dev` is only for creating development migrations. `db:migrate:deploy` is the explicit,
 controlled deployment step; application startup never creates or deploys migrations. The committed
-`20260803120000_add_resume` migration creates the resume table and updated-time index. Existing
-migrations must never be edited after application.
+`20260815180000_add_auth_and_ownership` migration adds Better Auth's user, account, session,
+verification, JWKS, and database rate-limit tables plus nullable indexed ownership fields. Those
+nullable fields preserve pre-authentication data; application writes always supply an owner and
+ordinary queries never expose null-owned rows. Existing migrations must never be edited after they
+have been applied.
+
+Inspect legacy unowned rows without reading CV content, filenames, or object keys:
+
+```bash
+psql "$DATABASE_URL" --file packages/database/scripts/find-unowned-resources.sql
+```
+
+Do not assign or delete legacy rows automatically. Any production cleanup/backfill requires a
+separate reviewed data decision. Applying CVB-023 to the real Neon database is a manual controlled
+deployment step.
 
 Prisma 7 reads `DATABASE_URL` through `packages/database/prisma.config.ts`. Host commands use
 `127.0.0.1` and `POSTGRES_PORT`; Compose supplies the API a URL using the `postgres` service and
@@ -590,7 +646,33 @@ Chromium itself remains sandboxed: the renderer explicitly removes Playwright's 
 replace this profile with `seccomp=unconfined`, broad capabilities, privileged mode, or Chromium
 sandbox-disabling flags.
 
+### Production-like release smoke test
+
+Use only disposable volumes, credentials, synthetic users, and synthetic resume content:
+
+1. Copy `.env.example` to an ignored `.env`, replace every placeholder, and generate a disposable
+   auth secret of at least 32 random characters.
+2. Run `docker compose config --quiet` and build the web, API, standard worker, and
+   document-processing worker targets.
+3. Start PostgreSQL, Valkey, and MinIO; run `npm run db:migrate:deploy` against that disposable
+   database as a separate step; then start application services.
+4. Sign up synthetic User A, create/edit/save a resume, change templates, reload it, export a PDF,
+   and download it through the authenticated UI.
+5. Sign out and confirm protected access fails. Sign up User B and confirm User A's resume, import,
+   export status, and PDF are inaccessible.
+6. Confirm both health endpoints, private MinIO policy, non-root users, and sandboxed Chromium
+   under `docker/chromium-seccomp.json`.
+7. Run CV import regressions with fake mapper tests; do not make an external AI call.
+8. Stop the stack and remove volumes only after confirming they are the disposable smoke resources.
+
+This repository is release-ready, not automatically deployed. Production domain/TLS, real secret
+provisioning, reviewed Neon migration, backups, monitoring, and provider deployment remain operator
+responsibilities.
+
 Known MVP limitations: dates are free-form; autosave does not offer multi-client conflict
-detection; authentication, ownership, OCR, antivirus scanning, version history, and templates
-beyond `classic` and `modern` remain out of scope. Automated retention/deletion for imported
-sources and generated PDFs is unresolved and must be defined before production use.
+detection; password reset and email verification have no delivery infrastructure; social login,
+MFA, OCR, antivirus scanning, version history, collaboration, teams, billing, additional templates,
+and automated retention/deletion remain deferred. A bearer JWT already issued before signout stays
+cryptographically valid until its 15-minute expiry; signout removes the database session, prevents
+new token issuance, and clears the browser's in-memory token. Imported sources and generated PDFs
+may be retained until an explicit deletion policy is implemented.

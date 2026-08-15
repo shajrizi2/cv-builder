@@ -5,6 +5,7 @@ import { createResumeImportProcessor } from '../src/processors/resume-import.pro
 import { ResumeImportProcessingError } from '../src/imports/import-error.js';
 import { UnavailableResumeMapper } from '../src/ai/unavailable-resume-mapper.js';
 import { RESUME_IMPORT_JOB_NAME } from '@cv-builder/resume-schema';
+import { extractDocument } from '../src/imports/document-extractor.js';
 vi.mock('../src/imports/document-extractor.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/imports/document-extractor.js')>();
   return { ...original, extractDocument: vi.fn().mockResolvedValue('resume text') };
@@ -28,9 +29,69 @@ describe('resume import processor idempotency', () => {
     expect(ai.map).not.toHaveBeenCalled();
   });
 
+  it.each(['QUEUED', 'PROCESSING'])(
+    'fails an ownerless %s import before accessing document content',
+    async (status) => {
+      const importId = '550e8400-e29b-41d4-a716-446655440010';
+      const storage = { get: vi.fn() };
+      const ai = { map: vi.fn() };
+      const resumeCreate = vi.fn();
+      const transaction = vi.fn((callback: (transactionClient: unknown) => unknown) =>
+        Promise.resolve(callback({ resume: { create: resumeCreate } })),
+      );
+      const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+      const database = {
+        resumeImport: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: importId,
+            ownerId: null,
+            objectKey: 'private-ownerless-object',
+            mimeType: 'application/pdf',
+            status,
+            resumeId: null,
+          }),
+          updateMany,
+        },
+        resume: { create: resumeCreate },
+        $transaction: transaction,
+      } as unknown as PrismaClient;
+
+      await expect(
+        createResumeImportProcessor(
+          database,
+          storage,
+          ai,
+        )({
+          name: RESUME_IMPORT_JOB_NAME,
+          data: { importId },
+          attemptsMade: 0,
+          opts: { attempts: 3 },
+        } as Job<unknown>),
+      ).rejects.toMatchObject({
+        code: 'PROCESSING_FAILED',
+        message: 'This import cannot be processed automatically.',
+      });
+
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: importId, ownerId: null, status: { in: ['QUEUED', 'PROCESSING'] } },
+        data: {
+          status: 'FAILED',
+          errorCode: 'PROCESSING_FAILED',
+          errorMessage: 'This import cannot be processed automatically.',
+        },
+      });
+      expect(storage.get).not.toHaveBeenCalled();
+      expect(extractDocument).not.toHaveBeenCalled();
+      expect(ai.map).not.toHaveBeenCalled();
+      expect(transaction).not.toHaveBeenCalled();
+      expect(resumeCreate).not.toHaveBeenCalled();
+    },
+  );
+
   it('does not let a late duplicate failure overwrite completed state', async () => {
     const importId = '550e8400-e29b-41d4-a716-446655440000';
     const resumeId = '550e8400-e29b-41d4-a716-446655440001';
+    const ownerId = '550e8400-e29b-41d4-a716-446655440002';
     const state = { status: 'QUEUED', resumeId: null as string | null };
     const resumes: string[] = [];
     const record = (): {
@@ -40,6 +101,7 @@ describe('resume import processor idempotency', () => {
       objectKey: string;
       status: string;
       resumeId: string | null;
+      ownerId: string;
     } => ({
       id: importId,
       originalFilename: 'cv.pdf',
@@ -47,6 +109,7 @@ describe('resume import processor idempotency', () => {
       objectKey: 'private-key',
       status: state.status,
       resumeId: state.resumeId,
+      ownerId,
     });
     const resumeImport = {
       findUnique: vi.fn(() => Promise.resolve(record())),
@@ -83,7 +146,8 @@ describe('resume import processor idempotency', () => {
           $queryRaw: vi.fn(),
           resumeImport: transactionImport,
           resume: {
-            create: vi.fn(() => {
+            create: vi.fn(({ data }: { data: { ownerId: string } }) => {
+              expect(data.ownerId).toBe(ownerId);
               resumes.push(resumeId);
               return Promise.resolve({ id: resumeId });
             }),
@@ -158,6 +222,7 @@ describe('resume import processor idempotency', () => {
           mimeType: 'application/pdf',
           status: 'QUEUED',
           resumeId: null,
+          ownerId: '550e8400-e29b-41d4-a716-446655440002',
         }),
         updateMany,
       },
@@ -193,6 +258,7 @@ describe('resume import processor idempotency', () => {
           mimeType: 'application/pdf',
           status: 'PROCESSING',
           resumeId: null,
+          ownerId: '550e8400-e29b-41d4-a716-446655440002',
         }),
         updateMany,
       },
@@ -252,6 +318,7 @@ describe('resume import processor idempotency', () => {
           mimeType: 'application/pdf',
           status: 'QUEUED',
           resumeId: null,
+          ownerId: '550e8400-e29b-41d4-a716-446655440002',
         }),
         updateMany,
       },

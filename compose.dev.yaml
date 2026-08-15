@@ -39,6 +39,7 @@ services:
       - ./apps/web/tsconfig.json:/app/apps/web/tsconfig.json
       - ./packages/resume-schema:/app/packages/resume-schema
       - ./packages/templates:/app/packages/templates
+      - ./packages/database:/app/packages/database
 
   api:
     build:

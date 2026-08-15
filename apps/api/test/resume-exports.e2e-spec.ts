@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/application';
 import { DatabaseService } from '../src/database/database.module';
+import { JwtVerifierService } from '../src/auth/jwt-verifier.service';
+import { addSyntheticAuthorization, testJwtVerifier } from './auth-test-helper';
 
 const queue = vi.hoisted(() => ({ add: vi.fn(), close: vi.fn() }));
 const storage = vi.hoisted(() => ({ getObject: vi.fn() }));
@@ -40,7 +42,7 @@ beforeEach(async () => {
   queue.close.mockResolvedValue(undefined);
   storage.getObject.mockResolvedValue(Readable.from([Buffer.from('%PDF-http')]));
   const resume = {
-    findUnique: vi.fn().mockImplementation(({ where }: { where: { id: string } }) =>
+    findFirst: vi.fn().mockImplementation(({ where }: { where: { id: string } }) =>
       where.id === resumeId
         ? {
             id: resumeId,
@@ -67,19 +69,17 @@ beforeEach(async () => {
   });
   const resumeExport = {
     create: vi.fn().mockImplementation(() => record()),
-    findUnique: vi
-      .fn()
-      .mockImplementation(({ where }: { where: { id: string } }) =>
-        where.id === exportId ? record() : null,
-      ),
     findFirst: vi.fn().mockImplementation(() => record()),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
   };
   const module = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(JwtVerifierService)
+    .useValue(testJwtVerifier)
     .overrideProvider(DatabaseService)
     .useValue({ client: { resume, resumeExport } })
     .compile();
   app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+  addSyntheticAuthorization(app);
   configureApplication(app);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

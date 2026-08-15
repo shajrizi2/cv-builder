@@ -22,11 +22,12 @@ export class ResumesService {
     return this.databaseService.client;
   }
 
-  async create(input: CreateResumeInput): Promise<Resume> {
+  async create(ownerId: string, input: CreateResumeInput): Promise<Resume> {
     return this.toResume(
       await this.database.resume.create({
         data: {
           title: input.title,
+          ownerId,
           content: createEmptyResumeContent(),
           template: input.template ?? DEFAULT_RESUME_TEMPLATE,
         },
@@ -34,34 +35,38 @@ export class ResumesService {
     );
   }
 
-  async list(): Promise<Resume[]> {
-    const records = await this.database.resume.findMany({ orderBy: { updatedAt: 'desc' } });
+  async list(ownerId: string): Promise<Resume[]> {
+    const records = await this.database.resume.findMany({
+      where: { ownerId },
+      orderBy: { updatedAt: 'desc' },
+    });
     return records.map((record) => this.toResume(record));
   }
 
-  async get(id: string): Promise<Resume> {
-    const record = await this.database.resume.findUnique({ where: { id } });
-    if (record === null) throw new NotFoundException(`Resume ${id} was not found`);
+  async get(ownerId: string, id: string): Promise<Resume> {
+    const record = await this.database.resume.findFirst({ where: { id, ownerId } });
+    if (record === null) throw new NotFoundException('Resume was not found');
     return this.toResume(record);
   }
 
-  async update(id: string, input: UpdateResumeInput): Promise<Resume> {
-    const existing = await this.database.resume.findUnique({ where: { id }, select: { id: true } });
-    if (existing === null) throw new NotFoundException(`Resume ${id} was not found`);
-    const record = await this.database.resume.update({
-      where: { id },
+  async update(ownerId: string, id: string, input: UpdateResumeInput): Promise<Resume> {
+    const result = await this.database.resume.updateMany({
+      where: { id, ownerId },
       data: {
         ...(input.title === undefined ? {} : { title: input.title }),
         ...(input.content === undefined ? {} : { content: input.content }),
         ...(input.template === undefined ? {} : { template: input.template }),
       },
     });
+    if (result.count === 0) throw new NotFoundException('Resume was not found');
+    const record = await this.database.resume.findFirst({ where: { id, ownerId } });
+    if (record === null) throw new NotFoundException('Resume was not found');
     return this.toResume(record);
   }
 
-  async delete(id: string): Promise<void> {
-    const result = await this.database.resume.deleteMany({ where: { id } });
-    if (result.count === 0) throw new NotFoundException(`Resume ${id} was not found`);
+  async delete(ownerId: string, id: string): Promise<void> {
+    const result = await this.database.resume.deleteMany({ where: { id, ownerId } });
+    if (result.count === 0) throw new NotFoundException('Resume was not found');
   }
 
   private toResume(record: NonNullable<StoredResume>): Resume {

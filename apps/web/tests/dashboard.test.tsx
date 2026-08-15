@@ -1,7 +1,7 @@
 import { createEmptyResumeContent } from '@cv-builder/resume-schema';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import HomePage from '@/app/page';
+import { ResumeDashboard } from '@/components/resume-dashboard';
 
 const api = vi.hoisted(() => ({
   listResumes: vi.fn(),
@@ -28,7 +28,7 @@ beforeEach(() => {
 });
 describe('resume dashboard', () => {
   it('shows loading then the empty state', async () => {
-    render(<HomePage />);
+    render(<ResumeDashboard />);
     expect(screen.getByRole('status')).toHaveTextContent('Loading resumes');
     expect(await screen.findByRole('heading', { name: 'No resumes yet' })).toBeInTheDocument();
   });
@@ -38,7 +38,7 @@ describe('resume dashboard', () => {
     api.deleteResume.mockResolvedValue(undefined);
     vi.spyOn(window, 'prompt').mockReturnValue('Renamed');
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<HomePage />);
+    render(<ResumeDashboard />);
     expect(await screen.findByRole('heading', { name: 'My CV' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
     expect(await screen.findByRole('heading', { name: 'Renamed' })).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe('resume dashboard', () => {
   });
   it('shows an actionable load error and retry', async () => {
     api.listResumes.mockRejectedValueOnce(new Error('API unavailable')).mockResolvedValueOnce([]);
-    render(<HomePage />);
+    render(<ResumeDashboard />);
     expect(await screen.findByRole('alert')).toHaveTextContent('API unavailable');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('No resumes yet')).toBeInTheDocument();

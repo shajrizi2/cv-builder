@@ -6,7 +6,7 @@ const api = vi.hoisted(() => ({
   createResumeExport: vi.fn(),
   getLatestResumeExport: vi.fn(),
   getResumeExport: vi.fn(),
-  resumeExportDownloadUrl: vi.fn((id: string) => `/api/resume-exports/${id}/download`),
+  downloadResumeExport: vi.fn(),
 }));
 vi.mock('@/lib/resumes-api', () => api);
 
@@ -79,10 +79,8 @@ describe('ResumeExportPanel', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
-    expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute(
-      'href',
-      `/api/resume-exports/${exportRecord('COMPLETED').id}/download`,
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Download PDF' }));
+    expect(api.downloadResumeExport).toHaveBeenCalledWith(exportRecord('COMPLETED').id);
   });
 
   it('recovers an active export after refresh and allows retry after failure', async () => {

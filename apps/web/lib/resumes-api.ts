@@ -11,15 +11,92 @@ import {
 
 import { publicEnv } from './env';
 
+let cachedToken: { value: string; expiresAt: number } | undefined;
+let tokenRequest: Promise<string> | undefined;
+
+export class AuthenticationExpiredError extends Error {
+  constructor() {
+    super('Your session has expired. Sign in again to continue.');
+    this.name = 'AuthenticationExpiredError';
+  }
+}
+
+function tokenExpiration(token: string): number {
+  try {
+    const encoded = token.split('.')[1];
+    if (!encoded) return 0;
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const payload = JSON.parse(atob(padded)) as {
+      exp?: unknown;
+    };
+    return typeof payload.exp === 'number' ? payload.exp * 1_000 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function clearApiAuthentication(): void {
+  cachedToken = undefined;
+  tokenRequest = undefined;
+}
+
+function reportExpiredAuthentication(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('cv-builder:auth-expired'));
+}
+
+async function getApiToken(forceRefresh = false): Promise<string> {
+  if (!forceRefresh && cachedToken && cachedToken.expiresAt - Date.now() > 30_000) {
+    return cachedToken.value;
+  }
+  if (tokenRequest) return tokenRequest;
+  const active = fetch('/api/auth/token', { credentials: 'include', cache: 'no-store' })
+    .then(async (response) => {
+      if (!response.ok) throw new AuthenticationExpiredError();
+      const body = (await response.json()) as { token?: unknown };
+      if (typeof body.token !== 'string') throw new AuthenticationExpiredError();
+      const expiresAt = tokenExpiration(body.token);
+      if (expiresAt <= Date.now()) throw new AuthenticationExpiredError();
+      cachedToken = { value: body.token, expiresAt };
+      return body.token;
+    })
+    .catch((error: unknown) => {
+      cachedToken = undefined;
+      reportExpiredAuthentication();
+      throw error instanceof AuthenticationExpiredError ? error : new AuthenticationExpiredError();
+    })
+    .finally(() => {
+      tokenRequest = undefined;
+    });
+  tokenRequest = active;
+  return active;
+}
+
 async function request(path: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(`${publicEnv.NEXT_PUBLIC_API_URL}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...init?.headers,
-    },
-  });
+  async function authenticatedFetch(forceRefresh = false) {
+    const token = await getApiToken(forceRefresh);
+    return fetch(`${publicEnv.NEXT_PUBLIC_API_URL}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.body !== undefined && !(init.body instanceof FormData)
+          ? { 'Content-Type': 'application/json' }
+          : {}),
+        ...init?.headers,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
+
+  let response = await authenticatedFetch();
+  if (response.status === 401) {
+    cachedToken = undefined;
+    response = await authenticatedFetch(true);
+  }
   if (!response.ok) {
+    if (response.status === 401) {
+      reportExpiredAuthentication();
+      throw new AuthenticationExpiredError();
+    }
     const body = (await response.json().catch(() => null)) as { message?: string } | null;
     throw new Error(body?.message ?? `Request failed (${response.status})`);
   }
@@ -69,6 +146,34 @@ export async function getLatestResumeExport(resumeId: string): Promise<ResumeExp
   const value = await request(`/resumes/${resumeId}/exports/latest`);
   return value === null ? null : resumeExportSchema.parse(value);
 }
-export function resumeExportDownloadUrl(id: string): string {
-  return `${publicEnv.NEXT_PUBLIC_API_URL}/resume-exports/${id}/download`;
+export async function downloadResumeExport(id: string): Promise<void> {
+  async function download(forceRefresh = false) {
+    const token = await getApiToken(forceRefresh);
+    return fetch(`${publicEnv.NEXT_PUBLIC_API_URL}/resume-exports/${id}/download`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+  let response = await download();
+  if (response.status === 401) {
+    cachedToken = undefined;
+    response = await download(true);
+  }
+  if (!response.ok) {
+    if (response.status === 401) {
+      reportExpiredAuthentication();
+      throw new AuthenticationExpiredError();
+    }
+    const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(body?.message ?? `Download failed (${response.status})`);
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const filename = encodedName ? decodeURIComponent(encodedName) : 'resume.pdf';
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

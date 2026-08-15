@@ -63,9 +63,11 @@ export class ResumeExportsService {
     private readonly config: ConfigService<ApplicationConfiguration, true>,
   ) {}
 
-  async create(resumeId: string): Promise<ResumeExport> {
-    const resume = await this.database.client.resume.findUnique({ where: { id: resumeId } });
-    if (!resume) throw new NotFoundException(`Resume ${resumeId} was not found`);
+  async create(ownerId: string, resumeId: string): Promise<ResumeExport> {
+    const resume = await this.database.client.resume.findFirst({
+      where: { id: resumeId, ownerId },
+    });
+    if (!resume) throw new NotFoundException('Resume was not found');
     const content = resumeContentSchema.parse(resume.content);
     const env = this.config.getOrThrow<Environment>('api');
     if (!env.redisHost || !env.minioEndpoint || !env.minioAccessKey || !env.minioSecretKey)
@@ -114,28 +116,32 @@ export class ResumeExportsService {
     return toPublicResumeExport(record);
   }
 
-  async get(id: string): Promise<ResumeExport> {
-    const record = await this.database.client.resumeExport.findUnique({ where: { id } });
-    if (!record) throw new NotFoundException(`Resume export ${id} was not found`);
+  async get(ownerId: string, id: string): Promise<ResumeExport> {
+    const record = await this.database.client.resumeExport.findFirst({
+      where: { id, resume: { ownerId } },
+    });
+    if (!record) throw new NotFoundException('Resume export was not found');
     return toPublicResumeExport(record);
   }
 
-  async latestForResume(resumeId: string): Promise<ResumeExport | null> {
-    const resume = await this.database.client.resume.findUnique({
-      where: { id: resumeId },
+  async latestForResume(ownerId: string, resumeId: string): Promise<ResumeExport | null> {
+    const resume = await this.database.client.resume.findFirst({
+      where: { id: resumeId, ownerId },
       select: { id: true },
     });
-    if (!resume) throw new NotFoundException(`Resume ${resumeId} was not found`);
+    if (!resume) throw new NotFoundException('Resume was not found');
     const record = await this.database.client.resumeExport.findFirst({
-      where: { resumeId },
+      where: { resumeId, resume: { ownerId } },
       orderBy: { createdAt: 'desc' },
     });
     return record ? toPublicResumeExport(record) : null;
   }
 
-  async download(id: string): Promise<{ bytes: Buffer; filename: string }> {
-    const record = await this.database.client.resumeExport.findUnique({ where: { id } });
-    if (!record) throw new NotFoundException(`Resume export ${id} was not found`);
+  async download(ownerId: string, id: string): Promise<{ bytes: Buffer; filename: string }> {
+    const record = await this.database.client.resumeExport.findFirst({
+      where: { id, resume: { ownerId } },
+    });
+    if (!record) throw new NotFoundException('Resume export was not found');
     if (record.status !== 'COMPLETED' || !record.objectKey)
       throw new ConflictException('PDF export is not ready for download');
     const env = this.config.getOrThrow<Environment>('api');

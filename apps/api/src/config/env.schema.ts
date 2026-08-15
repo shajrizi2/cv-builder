@@ -34,6 +34,9 @@ export interface Environment {
   minioAccessKey?: string;
   minioSecretKey?: string;
   minioBucket: string;
+  authJwksUrl: string;
+  apiJwtIssuer: string;
+  apiJwtAudience: string;
 }
 
 function parseBoolean(value: unknown): unknown {
@@ -101,6 +104,24 @@ class EnvironmentVariables {
   @IsString() @IsOptional() MINIO_ACCESS_KEY?: string;
   @IsString() @IsOptional() MINIO_SECRET_KEY?: string;
   @IsString() @IsOptional() MINIO_BUCKET?: string;
+  @IsString() @IsOptional() AUTH_JWKS_URL?: string;
+  @IsString() @IsOptional() API_JWT_ISSUER?: string;
+  @IsString() @IsOptional() API_JWT_AUDIENCE?: string;
+}
+
+function parseRequiredUrl(
+  value: string | undefined,
+  name: string,
+  nodeEnv: NodeEnvironment,
+  developmentDefault: string,
+): string {
+  const candidate = value?.trim() || (nodeEnv === 'production' ? '' : developmentDefault);
+  try {
+    new URL(candidate);
+    return candidate;
+  } catch {
+    throw new Error(`${name} must be a valid absolute URL`);
+  }
 }
 
 function normalizeOrigin(origin: string): string {
@@ -168,12 +189,16 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   if (redisUsername !== undefined && redisPassword === undefined) {
     throw new Error('REDIS_PASSWORD is required when REDIS_USERNAME is configured');
   }
+  const corsOrigins = parseCorsOrigins(validated.CORS_ORIGINS, nodeEnv);
+  const apiJwtAudience =
+    validated.API_JWT_AUDIENCE?.trim() || (nodeEnv === 'production' ? undefined : 'cv-builder-api');
+  if (!apiJwtAudience) throw new Error('API_JWT_AUDIENCE is required in production');
 
   return {
     nodeEnv,
     apiPort: validated.API_PORT ?? 3001,
     apiHost: validated.API_HOST?.trim() || '0.0.0.0',
-    corsOrigins: parseCorsOrigins(validated.CORS_ORIGINS, nodeEnv),
+    corsOrigins,
     swaggerEnabled: validated.SWAGGER_ENABLED ?? nodeEnv !== 'production',
     ...(validated.REDIS_HOST?.trim() ? { redisHost: validated.REDIS_HOST.trim() } : {}),
     redisPort: validated.REDIS_PORT ?? 6379,
@@ -191,5 +216,18 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
       ? { minioSecretKey: validated.MINIO_SECRET_KEY.trim() }
       : {}),
     minioBucket: validated.MINIO_BUCKET?.trim() || 'cv-imports',
+    authJwksUrl: parseRequiredUrl(
+      validated.AUTH_JWKS_URL,
+      'AUTH_JWKS_URL',
+      nodeEnv,
+      'http://localhost:3000/api/auth/jwks',
+    ),
+    apiJwtIssuer: parseRequiredUrl(
+      validated.API_JWT_ISSUER,
+      'API_JWT_ISSUER',
+      nodeEnv,
+      'http://localhost:3000',
+    ),
+    apiJwtAudience,
   };
 }

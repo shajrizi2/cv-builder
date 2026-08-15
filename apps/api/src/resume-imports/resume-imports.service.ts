@@ -93,7 +93,7 @@ export class ResumeImportsService {
     private readonly database: DatabaseService,
     private readonly config: ConfigService<ApplicationConfiguration, true>,
   ) {}
-  async create(request: FastifyRequest): Promise<ResumeImport> {
+  async create(ownerId: string, request: FastifyRequest): Promise<ResumeImport> {
     const part = await readStrictUpload(request);
     let validated;
     try {
@@ -124,6 +124,7 @@ export class ResumeImportsService {
           mimeType: validated.mimeType,
           fileSize: bytes.length,
           objectKey,
+          ownerId,
         },
       });
       const queue = new Queue(RESUME_IMPORT_QUEUE_NAME, {
@@ -167,14 +168,17 @@ export class ResumeImportsService {
     }
     return toPublicResumeImport(record);
   }
-  async list(): Promise<ResumeImport[]> {
+  async list(ownerId: string): Promise<ResumeImport[]> {
     return (
-      await this.database.client.resumeImport.findMany({ orderBy: { createdAt: 'desc' } })
+      await this.database.client.resumeImport.findMany({
+        where: { ownerId },
+        orderBy: { createdAt: 'desc' },
+      })
     ).map((r) => toPublicResumeImport(r));
   }
-  async get(id: string): Promise<ResumeImport> {
-    const r = await this.database.client.resumeImport.findUnique({ where: { id } });
-    if (!r) throw new NotFoundException(`Resume import ${id} was not found`);
+  async get(ownerId: string, id: string): Promise<ResumeImport> {
+    const r = await this.database.client.resumeImport.findFirst({ where: { id, ownerId } });
+    if (!r) throw new NotFoundException('Resume import was not found');
     return toPublicResumeImport(r);
   }
 }
