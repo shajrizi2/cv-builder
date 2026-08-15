@@ -138,6 +138,9 @@ export const resumeExportSchema = z
 
 export const resumeImportStatuses = ['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED'] as const;
 export const resumeImportStatusSchema = z.enum(resumeImportStatuses);
+export const resumeImportModes = ['AI_MAPPED', 'MANUAL_FALLBACK'] as const;
+export const resumeImportModeSchema = z.enum(resumeImportModes);
+export const MAX_EXTRACTED_TEXT_LENGTH = 100_000;
 export const supportedResumeImportMimeTypes = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -174,6 +177,8 @@ export const resumeImportSchema = z
       .positive()
       .max(10 * 1024 * 1024),
     status: resumeImportStatusSchema,
+    completionMode: resumeImportModeSchema.nullable(),
+    hasExtractedText: z.boolean(),
     errorCode: resumeImportErrorCodeSchema.nullable(),
     errorMessage: z.string().max(500).nullable(),
     resumeId: id.nullable(),
@@ -181,6 +186,27 @@ export const resumeImportSchema = z
     updatedAt: z.string().datetime(),
   })
   .strict();
+
+const aiMappedImportSourceSchema = z
+  .object({
+    importId: id,
+    completionMode: z.literal('AI_MAPPED'),
+    extractedText: z.null(),
+  })
+  .strict();
+const manualFallbackImportSourceSchema = z
+  .object({
+    importId: id,
+    completionMode: z.literal('MANUAL_FALLBACK'),
+    extractedText: z.string().trim().min(1).max(MAX_EXTRACTED_TEXT_LENGTH),
+  })
+  .strict();
+export const resumeImportSourceSchema = z
+  .discriminatedUnion('completionMode', [
+    aiMappedImportSourceSchema,
+    manualFallbackImportSourceSchema,
+  ])
+  .nullable();
 
 const aiExperienceSchema = experienceSchema.omit({ id: true });
 const aiEducationSchema = educationSchema.omit({ id: true });
@@ -212,10 +238,12 @@ export type Skill = ResumeContent['skills'][number];
 export type Language = ResumeContent['languages'][number];
 export type ResumeLink = ResumeContent['links'][number];
 export type ResumeImportStatus = z.infer<typeof resumeImportStatusSchema>;
+export type ResumeImportMode = z.infer<typeof resumeImportModeSchema>;
 export type SupportedResumeImportMimeType = z.infer<typeof supportedResumeImportMimeTypeSchema>;
 export type ResumeImportErrorCode = z.infer<typeof resumeImportErrorCodeSchema>;
 export type ResumeImportJobPayload = z.infer<typeof resumeImportJobPayloadSchema>;
 export type ResumeImport = z.infer<typeof resumeImportSchema>;
+export type ResumeImportSource = z.infer<typeof resumeImportSourceSchema>;
 export type AiResumeCandidate = z.infer<typeof aiResumeCandidateSchema>;
 export type ResumeExportStatus = z.infer<typeof resumeExportStatusSchema>;
 export type ResumeExportErrorCode = z.infer<typeof resumeExportErrorCodeSchema>;

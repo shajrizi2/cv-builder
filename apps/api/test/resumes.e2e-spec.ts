@@ -33,7 +33,23 @@ beforeEach(async () => {
   const resume = {
     create: resumeCreate,
     findMany: vi.fn(() => (exists ? [record] : [])),
-    findFirst: vi.fn(() => (exists ? record : null)),
+    findFirst: vi.fn((query: { include?: unknown }) =>
+      exists
+        ? query.include
+          ? {
+              ...record,
+              sourceImport: {
+                id: '550e8400-e29b-41d4-a716-446655440010',
+                ownerId: TEST_USER_ID,
+                resumeId: id,
+                status: 'COMPLETED',
+                completionMode: 'MANUAL_FALLBACK',
+                extractedText: 'Synthetic imported source',
+              },
+            }
+          : record
+        : null,
+    ),
     updateMany: vi.fn(({ data }: { data: Partial<typeof record> }) => {
       record = { ...record, ...data, updatedAt: date };
       return { count: exists ? 1 : 0 };
@@ -75,8 +91,9 @@ describe('resume HTTP API', () => {
 
     expect(response.statusCode).toBe(204);
     expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
-    expect(response.headers['access-control-allow-methods']?.split(',').map((method) => method.trim()))
-      .toContain('DELETE');
+    expect(
+      response.headers['access-control-allow-methods']?.split(',').map((method) => method.trim()),
+    ).toContain('DELETE');
   });
 
   it('supports create, list, get, update, and delete', async () => {
@@ -120,6 +137,22 @@ describe('resume HTTP API', () => {
     ).toBe(400);
     expect(
       (await app.inject({ method: 'PATCH', url: `/api/resumes/${id}`, payload: { content: {} } }))
+        .statusCode,
+    ).toBe(400);
+  });
+  it('returns the authenticated editor import source contract', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/resumes/${id}/import-source`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      importId: '550e8400-e29b-41d4-a716-446655440010',
+      completionMode: 'MANUAL_FALLBACK',
+      extractedText: 'Synthetic imported source',
+    });
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/resumes/not-a-uuid/import-source' }))
         .statusCode,
     ).toBe(400);
   });

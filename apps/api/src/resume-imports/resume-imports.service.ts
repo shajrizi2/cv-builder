@@ -25,8 +25,10 @@ interface StoredResumeImport {
   originalFilename: string;
   mimeType: string;
   fileSize: number;
-  objectKey: string;
+  objectKey: string | null;
   status: string;
+  completionMode: string | null;
+  extractedText: string | null;
   errorCode: string | null;
   errorMessage: string | null;
   resumeId: string | null;
@@ -41,6 +43,8 @@ export function toPublicResumeImport(record: StoredResumeImport): ResumeImport {
     mimeType: record.mimeType,
     fileSize: record.fileSize,
     status: record.status,
+    completionMode: record.completionMode,
+    hasExtractedText: record.extractedText !== null && record.extractedText.length > 0,
     errorCode: record.errorCode,
     errorMessage: record.errorMessage,
     resumeId: record.resumeId,

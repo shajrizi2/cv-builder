@@ -5,8 +5,10 @@ import {
   createEmptyResumeContent,
   resumeContentSchema,
   resumeSchema,
+  resumeImportSourceSchema,
   type CreateResumeInput,
   type Resume,
+  type ResumeImportSource,
   type UpdateResumeInput,
 } from '@cv-builder/resume-schema';
 
@@ -47,6 +49,35 @@ export class ResumesService {
     const record = await this.database.resume.findFirst({ where: { id, ownerId } });
     if (record === null) throw new NotFoundException('Resume was not found');
     return this.toResume(record);
+  }
+
+  async getImportSource(ownerId: string, id: string): Promise<ResumeImportSource> {
+    const record = await this.database.resume.findFirst({
+      where: { id, ownerId },
+      include: {
+        sourceImport: {
+          select: {
+            id: true,
+            ownerId: true,
+            resumeId: true,
+            status: true,
+            completionMode: true,
+            extractedText: true,
+          },
+        },
+      },
+    });
+    if (record === null) throw new NotFoundException('Resume was not found');
+    const source = record.sourceImport;
+    if (source === null || source.completionMode === null) return null;
+    if (source.ownerId !== ownerId || source.resumeId !== id || source.status !== 'COMPLETED') {
+      throw new NotFoundException('Resume was not found');
+    }
+    return resumeImportSourceSchema.parse({
+      importId: source.id,
+      completionMode: source.completionMode,
+      extractedText: source.completionMode === 'MANUAL_FALLBACK' ? source.extractedText : null,
+    });
   }
 
   async update(ownerId: string, id: string, input: UpdateResumeInput): Promise<Resume> {

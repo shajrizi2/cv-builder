@@ -49,4 +49,36 @@ describe.runIf(integrationEnabled)('PostgreSQL integration', () => {
       await client.resume.delete({ where: { id: created.id } });
     }
   });
+
+  it('keeps legacy imports readable and persists CVB-024 fallback fields', async () => {
+    if (testDatabaseUrl === undefined || testDatabaseUrl.trim() === '')
+      throw new Error('TEST_DATABASE_URL is required');
+    client = createDatabaseClient({ databaseUrl: testDatabaseUrl });
+    const created = await client.resumeImport.create({
+      data: {
+        originalFilename: 'synthetic.pdf',
+        mimeType: 'application/pdf',
+        fileSize: 42,
+        objectKey: `imports/${crypto.randomUUID()}`,
+      },
+    });
+    try {
+      expect(created).toMatchObject({ completionMode: null, extractedText: null });
+      const updated = await client.resumeImport.update({
+        where: { id: created.id },
+        data: {
+          completionMode: 'MANUAL_FALLBACK',
+          extractedText: 'Synthetic source text',
+          objectKey: null,
+        },
+      });
+      expect(updated).toMatchObject({
+        completionMode: 'MANUAL_FALLBACK',
+        extractedText: 'Synthetic source text',
+        objectKey: null,
+      });
+    } finally {
+      await client.resumeImport.delete({ where: { id: created.id } });
+    }
+  });
 });

@@ -8,6 +8,8 @@ import {
   updateResumeInputSchema,
   resumeImportJobPayloadSchema,
   resumeImportSchema,
+  resumeImportModeSchema,
+  resumeImportSourceSchema,
   RESUME_IMPORT_JOB_NAME,
   RESUME_IMPORT_QUEUE_NAME,
   DEFAULT_RESUME_TEMPLATE,
@@ -103,6 +105,8 @@ describe('resume import contracts', () => {
       mimeType: 'application/pdf',
       fileSize: 42,
       status: 'QUEUED',
+      completionMode: null,
+      hasExtractedText: false,
       errorCode: null,
       errorMessage: null,
       resumeId: null,
@@ -112,6 +116,37 @@ describe('resume import contracts', () => {
     expect(resumeImportSchema.parse(value)).toEqual(value);
     expect(
       resumeImportJobPayloadSchema.safeParse({ importId: value.id, text: 'private' }).success,
+    ).toBe(false);
+    expect(resumeImportSchema.safeParse({ ...value, extractedText: 'private' }).success).toBe(
+      false,
+    );
+  });
+
+  it('validates completion modes and strict nullable import sources', () => {
+    const importId = crypto.randomUUID();
+    expect(resumeImportModeSchema.options).toEqual(['AI_MAPPED', 'MANUAL_FALLBACK']);
+    expect(resumeImportModeSchema.safeParse('UNKNOWN').success).toBe(false);
+    expect(resumeImportSourceSchema.parse(null)).toBeNull();
+    expect(
+      resumeImportSourceSchema.parse({
+        importId,
+        completionMode: 'AI_MAPPED',
+        extractedText: null,
+      }),
+    ).toEqual({ importId, completionMode: 'AI_MAPPED', extractedText: null });
+    expect(
+      resumeImportSourceSchema.safeParse({
+        importId,
+        completionMode: 'MANUAL_FALLBACK',
+        extractedText: 'Synthetic source text',
+      }).success,
+    ).toBe(true);
+    expect(
+      resumeImportSourceSchema.safeParse({
+        importId,
+        completionMode: 'MANUAL_FALLBACK',
+        extractedText: '',
+      }).success,
     ).toBe(false);
   });
 

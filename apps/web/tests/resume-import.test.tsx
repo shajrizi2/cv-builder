@@ -13,6 +13,8 @@ const base = {
   mimeType: 'application/pdf',
   fileSize: 8,
   status: 'QUEUED',
+  completionMode: null,
+  hasExtractedText: false,
   errorCode: null,
   errorMessage: null,
   resumeId: null,
@@ -24,6 +26,7 @@ const completed = {
   ...base,
   status: 'COMPLETED' as const,
   resumeId: '550e8400-e29b-41d4-a716-446655440001',
+  completionMode: 'AI_MAPPED' as const,
 };
 const failed = {
   ...base,
@@ -56,7 +59,7 @@ describe('resume import dashboard', () => {
     await poll();
     expect(navigate).not.toHaveBeenCalled();
     expect(api.getResumeImport).not.toHaveBeenCalled();
-    expect(screen.getByText('Imported')).toBeInTheDocument();
+    expect(screen.getByText('Imported automatically')).toBeInTheDocument();
     expect(screen.getByText('Import failed')).toBeInTheDocument();
   });
   it('redirects when a recovered active import later completes and stops polling', async () => {

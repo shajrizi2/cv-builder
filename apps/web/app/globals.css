@@ -203,6 +203,31 @@ a {
   color: #991b1b;
   padding: 1rem;
 }
+.import-success,
+.import-source,
+.source-warning {
+  margin: 1rem 1.25rem 0;
+  border: 1px solid #a5f3fc;
+  border-radius: 0.6rem;
+  background: #ecfeff;
+  color: #164e63;
+  padding: 1rem;
+}
+.import-source p {
+  margin-top: 0;
+}
+.import-source summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+.import-source pre {
+  max-height: 26rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  margin-bottom: 0;
+}
 .workspace {
   min-height: 100vh;
 }

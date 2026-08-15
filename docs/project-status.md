@@ -34,6 +34,7 @@ Sprint 2 — MVP Core
 - [x] CVB-021 — Existing CV upload and AI import
 - [x] CVB-022 — Resume templates and PDF export
 - [x] CVB-023 — Authentication, resource ownership, and MVP release validation
+- [x] CVB-024 — AI-optional CV import fallback
 
 ## In Progress
 
@@ -150,3 +151,17 @@ No additional MVP ticket is planned. CVB-019 remains deferred.
 - CVB-023 adds one non-destructive Prisma migration and a read-only legacy ownership audit query.
 - The repository is release-ready but is not claimed to be publicly deployed. Production secret,
   domain/trusted-origin configuration, Neon migration deployment, and hosting remain manual.
+
+## CVB-024 Delivered Architecture
+
+- Local PDF/DOCX extraction is the import success boundary; missing or failed AI mapping now creates
+  a valid owned manual draft instead of failing an otherwise usable import.
+- `ResumeImport` records `AI_MAPPED` or `MANUAL_FALLBACK` separately from its existing lifecycle.
+  Extracted text is capped at 100,000 characters, retained only for manual fallback, and returned
+  only by the owner-scoped editor source endpoint.
+- Original source objects are deleted best-effort only after durable extraction. Persisted text is
+  reused on infrastructure retry, and completed imports remain idempotent.
+- Both OpenAI key/model values absent is supported; both present enables AI; partial configuration
+  fails worker validation. No feature flag is required.
+- The CVB-024 Prisma migration is committed but deployment to real Neon remains a controlled manual
+  action. Automatic reconciliation of rare source-object cleanup failures remains deferred.

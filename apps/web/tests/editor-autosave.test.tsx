@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getLatestResumeExport: vi.fn(),
   getResumeExport: vi.fn(),
   downloadResumeExport: vi.fn(),
+  getResumeImportSource: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('@/lib/resumes-api', () => api);
@@ -27,9 +28,47 @@ beforeEach(() => {
   vi.useFakeTimers();
   api.updateResume.mockResolvedValue(resume);
   api.getLatestResumeExport.mockResolvedValue(null);
+  api.getResumeImportSource.mockResolvedValue(null);
 });
 afterEach(() => vi.useRealTimers());
 describe('resume editor and autosave', () => {
+  it('shows manual fallback text as a read-only escaped plain-text disclosure', async () => {
+    api.getResumeImportSource.mockResolvedValue({
+      importId: '550e8400-e29b-41d4-a716-446655440010',
+      completionMode: 'MANUAL_FALLBACK',
+      extractedText: '<script>window.syntheticAttack = true</script>\nSecond line',
+    });
+    render(<ResumeEditor initialResume={resume} />);
+    await act(async () => {});
+    expect(screen.getByText(/automatic mapping was unavailable/)).toBeInTheDocument();
+    const source = screen.getByLabelText('Imported CV text');
+    expect(source).toHaveTextContent('<script>window.syntheticAttack = true</script>');
+    expect(source.querySelector('script')).toBeNull();
+    expect(source).not.toHaveAttribute('contenteditable');
+  });
+
+  it('distinguishes AI mapping and keeps edits usable when source lookup fails', async () => {
+    api.getResumeImportSource.mockResolvedValueOnce({
+      importId: '550e8400-e29b-41d4-a716-446655440010',
+      completionMode: 'AI_MAPPED',
+      extractedText: null,
+    });
+    const { unmount } = render(<ResumeEditor initialResume={resume} />);
+    await act(async () => {});
+    expect(screen.getByText('Your CV was imported and mapped automatically.')).toBeInTheDocument();
+    expect(screen.queryByText('Imported CV text')).not.toBeInTheDocument();
+    unmount();
+
+    api.getResumeImportSource.mockRejectedValueOnce(new Error('offline'));
+    render(<ResumeEditor initialResume={resume} />);
+    await act(async () => {});
+    fireEvent.change(screen.getByLabelText('Summary'), {
+      target: { value: 'Local edit survives' },
+    });
+    expect(screen.getByLabelText('Summary')).toHaveValue('Local edit survives');
+    expect(screen.getByText(/continue editing/)).toBeInTheDocument();
+  });
+
   it('switches templates immediately and persists through autosave', async () => {
     render(<ResumeEditor initialResume={resume} />);
     fireEvent.change(screen.getByLabelText('Resume template'), { target: { value: 'modern' } });
