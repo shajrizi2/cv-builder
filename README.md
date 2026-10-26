@@ -1,6 +1,33 @@
 # CV Builder
 
-A TypeScript monorepo for a fully Dockerized web-based CV builder.
+A TypeScript monorepo for a web-based CV builder with a Next.js editor, NestJS API,
+and BullMQ document workers. Users can create a résumé, import a PDF or DOCX file,
+review and edit its content, choose a template, and request a private PDF export.
+
+## Engineering overview
+
+```mermaid
+flowchart LR
+  Browser[Next.js editor] --> API[NestJS API]
+  API --> DB[(PostgreSQL / Prisma)]
+  API --> Queue[BullMQ / Valkey]
+  API --> Objects[(Private MinIO objects)]
+  Queue --> Worker[Document workers]
+  Worker --> DB
+  Worker --> Objects
+  Worker --> AI[Optional OpenAI extraction]
+  Worker --> PDF[Chromium PDF rendering]
+```
+
+The import pipeline extracts text, optionally maps it with AI into a validated
+résumé schema, and opens an editable draft. Without a usable AI result, it creates
+a manual draft with an owner-only source-text panel. PDF export uses a persisted
+snapshot and a separate background job.
+
+**Status:** the features above are implemented in the source. Deployment, runtime
+verification, and passing checks must be assessed for the revision you run; this
+README is not evidence of a production deployment. See the known MVP limitations
+at the end before using real personal data.
 
 ## Repository structure
 
@@ -8,7 +35,7 @@ A TypeScript monorepo for a fully Dockerized web-based CV builder.
 apps/
   api/           NestJS API and resume CRUD
   web/           Next.js resume dashboard and editor
-  worker/        BullMQ worker placeholder
+  worker/        BullMQ import and export processors
 packages/
   database/      Shared Prisma and PostgreSQL package
   eslint-config/ Shared ESLint flat configuration
@@ -16,14 +43,14 @@ packages/
   shared/        Shared utilities package placeholder
   templates/     Shared deterministic resume HTML/CSS renderer
   validation/    Shared validation package placeholder
-infrastructure/
-  docker/        Docker configuration placeholder
-  nginx/         Nginx configuration placeholder
-  scripts/       Infrastructure scripts placeholder
+apps/*/Dockerfile  Application and document-worker images
+compose.yaml      PostgreSQL, Valkey, MinIO and application services
+compose.dev.yaml  Local development overrides
+docker/           Chromium seccomp configuration
+infrastructure/   Reserved infrastructure scaffolding
 ```
 
-The planned MVP core is complete: authenticated users can create or import private resumes, edit
-and preview them, select a template, and generate private PDF exports.
+Shared utilities and validation placeholders are reserved scaffolding; they are not additional implemented services.
 
 ## Requirements
 
@@ -115,6 +142,30 @@ stack is intended for bundled PostgreSQL and injects its internal URL into both 
 not use that stack unchanged when they should connect to Neon; start the applications as shown
 above or run the individual production images with reviewed runtime configuration.
 
+## Validation and data handling
+
+- Run `npm run build` after installing dependencies to generate the Prisma client
+  and build shared workspace exports. Then run `npm run lint`, `npm run typecheck`
+  and `npm run test`. On a fresh checkout, checks may fail on missing generated
+  imports before that initial build.
+- Database and worker integration tests are opt-in; use distinct disposable test
+  services and the flags documented below. API e2e tests run through
+  `npm run test:e2e --workspace=@cv-builder/api`; these exercise the HTTP boundary
+  with test overrides and do not replace real-service integration checks.
+- Development Swagger is at `http://localhost:3001/api/docs`; production Swagger
+  is disabled by default. API examples must use synthetic résumé data.
+- Copy `.env.example` for the complete configuration reference. `DATABASE_URL`
+  and auth values configure the web/API boundary; `REDIS_*` and `MINIO_*` configure
+  queued work and private objects. `OPENAI_API_KEY` and `OPENAI_MODEL` must both
+  be set or both be blank. Example passwords are local placeholders only.
+- Enabling AI sends extracted résumé text to the configured OpenAI service.
+  Review consent and provider data handling before processing personal documents.
+  Never use real résumés for public demos, tests, logs or screenshots.
+- Imports accept text-based PDF/DOCX up to 10 MB and bound extracted text to
+  100,000 characters. OCR and antivirus scanning are not implemented. Original
+  object cleanup is best-effort; manual fallback retains private extracted text.
+  Export retention and failed-cleanup reconciliation need an operator policy.
+
 ## Root commands
 
 ```bash
@@ -188,8 +239,7 @@ docker build \
   .
 ```
 
-The development target starts Next.js on `0.0.0.0:3000`. Source mounts and Docker Compose
-configuration are intentionally left to later infrastructure tickets.
+The development target starts Next.js on `0.0.0.0:3000`. Use `compose.dev.yaml` for the repository’s application source mounts.
 
 Server-only environment variables are supplied when the production container runs, for example
 with Docker's `--env` or `--env-file` options; environment files are not copied into the image.
@@ -382,15 +432,16 @@ docker build \
   .
 ```
 
-The development target starts the NestJS watcher on `0.0.0.0:3001`. Source mounts and Docker
-Compose configuration are intentionally left to later infrastructure tickets. Runtime environment
+The development target starts the NestJS watcher on `0.0.0.0:3001`. Use `compose.dev.yaml` for application source mounts. Runtime environment
 values should be supplied with Docker's `--env` or `--env-file` options; environment files and
 secrets are not copied into the image.
 
 ## Worker application
 
-The BullMQ background worker is available in `apps/worker`. It currently provides the
-`system-test` queue foundation; real document-processing jobs are intentionally outside its scope.
+The BullMQ background worker in `apps/worker` provides the `system-test` queue and
+résumé import/export processors. Compose separates the standard worker from the
+Chromium-capable document worker used for PDF exports. Both rely on PostgreSQL,
+Valkey/Redis and private MinIO storage for the document workflow.
 
 Start it from the repository root:
 
@@ -460,7 +511,7 @@ docker build \
 ```
 
 The development target runs `npm run dev --workspace=@cv-builder/worker` as UID/GID `1001`.
-Docker Compose and volume configuration remain intentionally outside this ticket.
+Compose and volume settings are defined in `compose.yaml` and `compose.dev.yaml`.
 
 An optional browser-capable target adds Debian Chromium and Latin, Arabic, and broad Unicode fonts
 without adding those packages to the minimal worker:
@@ -684,7 +735,7 @@ Use only disposable volumes, credentials, synthetic users, and synthetic resume 
    automated tests.
 9. Stop the stack and remove volumes only after confirming they are the disposable smoke resources.
 
-This repository is release-ready, not automatically deployed. Production domain/TLS, real secret
+Production readiness requires running the checks and release smoke test for the target environment. Production domain/TLS, real secret
 provisioning, reviewed Neon migration, backups, monitoring, and provider deployment remain operator
 responsibilities.
 
